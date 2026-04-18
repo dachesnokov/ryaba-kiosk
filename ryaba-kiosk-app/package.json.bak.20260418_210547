@@ -1,0 +1,58 @@
+{
+  "name": "ryaba-kiosk-shell",
+  "version": "0.1.0",
+  "description": "Ryaba Kiosk Shell for MOS 12 information kiosks",
+  "main": "src/main.js",
+  "author": "Ryaba Core",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron .",
+    "build:dir": "electron-builder --linux dir",
+    "build:rpm": "electron-builder --linux rpm",
+    "build:appimage": "electron-builder --linux AppImage"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "ru.ryaba.kiosk",
+    "productName": "Ryaba Kiosk Shell",
+    "artifactName": "ryaba-kiosk-shell-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "config/**/*",
+      "helper/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "helper/ryaba-kiosk-helper.py",
+        "to": "helper/ryaba-kiosk-helper.py"
+      }
+    ],
+    "linux": {
+      "target": [
+        "rpm",
+        "dir",
+        "AppImage"
+      ],
+      "category": "Network",
+      "synopsis": "Managed kiosk browser for Ryaba Core",
+      "description": "Managed kiosk browser shell with Ryaba Core enrollment, allowlist navigation and local system panel.",
+      "executableName": "ryaba-kiosk-shell"
+    },
+    "rpm": {
+      "packageName": "ryaba-kiosk-shell",
+      "depends": [
+        "NetworkManager",
+        "python3"
+      ]
+    }
+  }
+}

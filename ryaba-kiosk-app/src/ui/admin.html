@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Ryaba Kiosk · Панель администратора</title>
+  <link rel="stylesheet" href="./admin.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="header">
+      <div>
+        <div class="eyebrow">Ryaba Kiosk</div>
+        <h1>Панель администратора</h1>
+      </div>
+      <div class="actions">
+        <button id="goHome">На главную</button>
+        <button id="reload">Обновить</button>
+      </div>
+    </section>
+
+    <section id="loginCard" class="card login">
+      <h2>Введите PIN</h2>
+      <div class="row">
+        <input id="pin" type="password" placeholder="PIN администратора" autofocus />
+        <button id="login">Открыть</button>
+      </div>
+      <p id="loginError" class="error"></p>
+    </section>
+
+    <section id="content" class="grid hidden">
+      <div class="card">
+        <h2>Состояние</h2>
+        <dl id="statusList"></dl>
+      </div>
+
+      <div class="card">
+        <h2>Сеть</h2>
+        <button id="scanWifi">Сканировать Wi‑Fi</button>
+        <div id="networkStatus" class="mono"></div>
+        <div id="wifiList"></div>
+      </div>
+
+      <div class="card">
+        <h2>Подключение к Wi‑Fi</h2>
+        <input id="wifiSsid" placeholder="SSID" />
+        <input id="wifiPassword" type="password" placeholder="Пароль" />
+        <button id="connectWifi">Подключить</button>
+        <pre id="wifiResult"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Звук</h2>
+        <input id="volume" type="range" min="0" max="100" value="50" />
+        <button id="setVolume">Применить громкость</button>
+        <pre id="audioStatus"></pre>
+      </div>
+
+      <div class="card wide">
+        <h2>Камера и микрофон</h2>
+        <button id="testMedia">Проверить камеру/микрофон</button>
+        <video id="preview" autoplay playsinline muted></video>
+        <pre id="mediaResult"></pre>
+      </div>
+    </section>
+  </main>
+  <script src="./admin.js"></script>
+</body>
+</html>

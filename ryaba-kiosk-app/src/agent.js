@@ -1,0 +1,186 @@
+const os = require('os');
+const fs = require('fs');
+const crypto = require('crypto');
+const { readDeviceState, writeDeviceState, writeRemoteConfig } = require('./config');
+
+function readMachineId() {
+  for (const file of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
+    try {
+      const value = fs.readFileSync(file, 'utf8').trim();
+      if (value) return value;
+    } catch (_) {}
+  }
+  return os.hostname();
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function getMacAddresses() {
+  const interfaces = os.networkInterfaces();
+  const result = [];
+  for (const [name, rows] of Object.entries(interfaces)) {
+    for (const row of rows || []) {
+      if (row && row.mac && row.mac !== '00:00:00:00:00:00') {
+        result.push({ name, mac: row.mac, address: row.address, family: row.family });
+      }
+    }
+  }
+  return result;
+}
+
+function devicePayload() {
+  return {
+    hostname: os.hostname(),
+    platform: os.platform(),
+    arch: os.arch(),
+    release: os.release(),
+    machineIdHash: sha256(readMachineId()),
+    macAddresses: getMacAddresses(),
+    appVersion: require('../package.json').version
+  };
+}
+
+async function requestJson(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text }; }
+  if (!res.ok) {
+    const message = data.message || data.error || `${res.status} ${res.statusText}`;
+    throw new Error(message);
+  }
+  return data;
+}
+
+class RyabaAgent {
+  constructor(configProvider, onConfigChanged) {
+    this.configProvider = configProvider;
+    this.onConfigChanged = onConfigChanged;
+    this.timer = null;
+    this.commandsTimer = null;
+  }
+
+  get config() {
+    return this.configProvider();
+  }
+
+  async enrollIfNeeded() {
+    const config = this.config;
+    const state = readDeviceState();
+    if (state.deviceToken && state.deviceUuid) return state;
+    if (!config.coreUrl || !config.enrollmentToken) {
+      return { offline: true, reason: 'coreUrl or enrollmentToken is empty' };
+    }
+
+    const data = await requestJson(`${config.coreUrl.replace(/\/$/, '')}/api/services/kiosks/enroll`, {
+      method: 'POST',
+      body: JSON.stringify({
+        enrollment_token: config.enrollmentToken,
+        device: devicePayload()
+      })
+    });
+
+    const newState = {
+      deviceUuid: data.device_uuid,
+      deviceToken: data.device_token,
+      enrolledAt: new Date().toISOString()
+    };
+    writeDeviceState(newState);
+    return newState;
+  }
+
+  authHeaders() {
+    const state = readDeviceState();
+    if (!state.deviceToken) return {};
+    return { Authorization: `Bearer ${state.deviceToken}` };
+  }
+
+  async heartbeat() {
+    const config = this.config;
+    if (!config.coreUrl) return { ok: false, error: 'coreUrl empty' };
+    await this.enrollIfNeeded();
+    const data = await requestJson(`${config.coreUrl.replace(/\/$/, '')}/api/services/kiosks/heartbeat`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify({
+        device: devicePayload(),
+        current_url: global.__RYABA_CURRENT_URL__ || null
+      })
+    });
+
+    if (data.config && data.config_version) {
+      writeRemoteConfig({
+        ...data.config,
+        remoteConfigVersion: data.config_version,
+        fetchedAt: new Date().toISOString()
+      });
+      if (typeof this.onConfigChanged === 'function') this.onConfigChanged();
+    }
+
+    return data;
+  }
+
+  async fetchCommands() {
+    const config = this.config;
+    const state = readDeviceState();
+    if (!config.coreUrl || !state.deviceToken) return [];
+    try {
+      const data = await requestJson(`${config.coreUrl.replace(/\/$/, '')}/api/services/kiosks/commands`, {
+        method: 'GET',
+        headers: this.authHeaders()
+      });
+      return data.commands || [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async reportCommand(id, result) {
+    const config = this.config;
+    try {
+      await requestJson(`${config.coreUrl.replace(/\/$/, '')}/api/services/kiosks/commands/${id}/result`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ result })
+      });
+    } catch (_) {}
+  }
+
+  start(commandHandler) {
+    const hbSeconds = Number(this.config.heartbeatSeconds || 30);
+    const cmdSeconds = Number(this.config.commandsSeconds || 15);
+
+    const tickHeartbeat = async () => {
+      try { await this.heartbeat(); } catch (error) { console.error('[agent] heartbeat failed:', error.message); }
+    };
+
+    const tickCommands = async () => {
+      const commands = await this.fetchCommands();
+      for (const cmd of commands) {
+        let result = { ok: false, error: 'no handler' };
+        try {
+          result = await commandHandler(cmd);
+        } catch (error) {
+          result = { ok: false, error: error.message };
+        }
+        await this.reportCommand(cmd.id, result);
+      }
+    };
+
+    tickHeartbeat();
+    tickCommands();
+    this.timer = setInterval(tickHeartbeat, hbSeconds * 1000);
+    this.commandsTimer = setInterval(tickCommands, cmdSeconds * 1000);
+  }
+}
+
+module.exports = { RyabaAgent };

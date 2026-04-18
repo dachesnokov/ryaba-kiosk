@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+import json
+import os
+import pwd
+import grp
+import shlex
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+SOCKET_PATH = "/run/ryaba-kiosk-helper.sock"
+KIOSK_USER = os.environ.get("RYABA_KIOSK_USER", "ryaba-kiosk")
+KIOSK_GROUP = os.environ.get("RYABA_KIOSK_GROUP", "ryaba-kiosk")
+
+
+def run(args, timeout=12):
+    try:
+        proc = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+            text=True,
+            check=False,
+        )
+        return {
+            "ok": proc.returncode == 0,
+            "code": proc.returncode,
+            "stdout": proc.stdout.strip(),
+            "stderr": proc.stderr.strip(),
+            "cmd": " ".join(shlex.quote(x) for x in args),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "cmd": args}
+
+
+def network_status(_payload):
+    dev = run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"])
+    con = run(["nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "con", "show", "--active"])
+    ip = run(["hostname", "-I"])
+    return {"ok": dev["ok"], "data": {"devices": dev, "connections": con, "ip": ip}}
+
+
+def wifi_scan(_payload):
+    result = run(["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes"], timeout=20)
+    if not result["ok"]:
+        return result
+
+    rows = []
+    seen = set()
+    for line in result["stdout"].splitlines():
+        parts = line.split(":")
+        ssid = parts[0].replace("\\:", ":") if parts else ""
+        signal = parts[1] if len(parts) > 1 else ""
+        security = parts[2] if len(parts) > 2 else ""
+        key = (ssid, security)
+        if not ssid or key in seen:
+            continue
+        seen.add(key)
+        rows.append({"ssid": ssid, "signal": signal, "security": security})
+    return {"ok": True, "data": rows}
+
+
+def wifi_connect(payload):
+    ssid = str(payload.get("ssid") or "").strip()
+    password = str(payload.get("password") or "")
+    if not ssid:
+        return {"ok": False, "error": "SSID is empty"}
+
+    args = ["nmcli", "device", "wifi", "connect", ssid]
+    if password:
+        args += ["password", password]
+    return run(args, timeout=30)
+
+
+def audio_status(_payload):
+    volume = run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"])
+    mute = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"])
+    source = run(["pactl", "get-source-mute", "@DEFAULT_SOURCE@"])
+    return {"ok": volume["ok"] or mute["ok"], "data": {"volume": volume, "mute": mute, "microphone": source}}
+
+
+def audio_set_volume(payload):
+    try:
+        volume = int(payload.get("volume", 50))
+    except Exception:
+        volume = 50
+    volume = max(0, min(100, volume))
+    return run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{volume}%"])
+
+
+def audio_mute(payload):
+    value = "1" if bool(payload.get("muted")) else "0"
+    return run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", value])
+
+
+ACTIONS = {
+    "network.status": network_status,
+    "wifi.scan": wifi_scan,
+    "wifi.connect": wifi_connect,
+    "audio.status": audio_status,
+    "audio.setVolume": audio_set_volume,
+    "audio.mute": audio_mute,
+}
+
+
+def handle(request):
+    action = request.get("action")
+    payload = request.get("payload") or {}
+    fn = ACTIONS.get(action)
+    if not fn:
+        return {"ok": False, "error": f"unknown action: {action}"}
+    try:
+        return fn(payload)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def prepare_socket(path):
+    p = Path(path)
+    if p.exists():
+        p.unlink()
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.bind(path)
+
+    try:
+        uid = pwd.getpwnam(KIOSK_USER).pw_uid
+        gid = grp.getgrnam(KIOSK_GROUP).gr_gid
+        os.chown(path, uid, gid)
+        os.chmod(path, 0o660)
+    except Exception:
+        os.chmod(path, 0o666)
+
+    sock.listen(20)
+    return sock
+
+
+def main():
+    sock = prepare_socket(SOCKET_PATH)
+    print(f"Ryaba Kiosk helper listening on {SOCKET_PATH}", flush=True)
+
+    while True:
+        conn, _addr = sock.accept()
+        try:
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = conn.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+
+            request = json.loads(data.decode("utf-8").strip() or "{}")
+            response = handle(request)
+            conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+        except Exception as exc:
+            response = {"ok": False, "error": str(exc)}
+            try:
+                conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+            except Exception:
+                pass
+        finally:
+            conn.close()
+
+
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("This helper must be started as root by systemd.", file=sys.stderr)
+    main()
