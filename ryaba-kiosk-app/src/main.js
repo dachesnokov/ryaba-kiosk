@@ -21,6 +21,83 @@ function reloadConfig() {
   return config;
 }
 
+function hasRemoteProfileConfig(nextConfig = {}) {
+  return Boolean(nextConfig.remoteConfigVersion || nextConfig.fetchedAt || nextConfig.homeUrl);
+}
+
+function getWaitingProfileHtml(message = 'Киоск подключается к Ryaba Core и ожидает настройки профиля.') {
+  return `
+    <!doctype html>
+    <html lang="ru">
+    <head>
+      <meta charset="utf-8">
+      <title>Ryaba Kiosk · Ожидание профиля</title>
+      <style>
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          background: #0f172a;
+          color: #fff;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .card {
+          width: min(760px, calc(100vw - 48px));
+          border-radius: 32px;
+          background: rgba(255,255,255,.08);
+          box-shadow: 0 28px 90px rgba(0,0,0,.35);
+          padding: 36px;
+        }
+        .label {
+          color: #94a3b8;
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+        }
+        h1 {
+          margin: 10px 0 12px;
+          font-size: 34px;
+        }
+        p {
+          margin: 0;
+          color: #cbd5e1;
+          font-size: 17px;
+          line-height: 1.6;
+        }
+        .dot {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          margin-right: 8px;
+          border-radius: 999px;
+          background: #38bdf8;
+          animation: pulse 1.1s infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: .35; transform: scale(.85); }
+          50% { opacity: 1; transform: scale(1.15); }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="label">Ryaba Kiosk Shell</div>
+        <h1><span class="dot"></span>Ожидание настроек</h1>
+        <p>${message}</p>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+function showWaitingProfile(message) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(getWaitingProfileHtml(message)));
+}
+
+
 function sendBlocked(reason, url) {
   console.warn('[security] blocked:', reason, url);
 }
@@ -157,9 +234,14 @@ ${validatedUrl}</pre>
     return;
   }
 
+  if (!hasRemoteProfileConfig(config)) {
+    showWaitingProfile('Киоск зарегистрирован или подключается к Ryaba Core. Ожидаем профиль и стартовую страницу из Ryaba.');
+    return;
+  }
+
   const homeUrl = getSafeHomeUrl(config);
   if (homeUrl === 'about:blank') {
-    mainWindow.loadFile(path.join(__dirname, 'ui', 'offline.html'));
+    showWaitingProfile('Ryaba Core пока не передала стартовую страницу профиля.');
   } else {
     mainWindow.loadURL(homeUrl);
   }
@@ -248,7 +330,15 @@ app.whenReady().then(() => {
 
   const agent = new RyabaAgent(() => config, () => {
     reloadConfig();
-    if (mainWindow) mainWindow.loadURL(getSafeHomeUrl(config));
+
+    if (!mainWindow) return;
+
+    if (!hasRemoteProfileConfig(config)) {
+      showWaitingProfile('Ryaba Core пока не передала профиль киоска.');
+      return;
+    }
+
+    mainWindow.loadURL(getSafeHomeUrl(config));
   });
   agent.start(handleCommand);
 
@@ -339,7 +429,15 @@ app.whenReady().then(() => {
 
   ipcMain.handle('kiosk:home', async () => {
     reloadConfig();
-    if (mainWindow) mainWindow.loadURL(getSafeHomeUrl(config));
+
+    if (mainWindow) {
+      if (!hasRemoteProfileConfig(config)) {
+        showWaitingProfile('Стартовая страница еще не получена из профиля Ryaba.');
+      } else {
+        mainWindow.loadURL(getSafeHomeUrl(config));
+      }
+    }
+
     return { ok: true };
   });
 

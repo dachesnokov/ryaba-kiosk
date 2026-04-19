@@ -2,6 +2,7 @@ const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 const { readDeviceState, writeDeviceState, writeRemoteConfig } = require('./config');
+const { sanitizeRemoteConfig } = require('./security');
 
 function readMachineId() {
   for (const file of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
@@ -92,6 +93,7 @@ class RyabaAgent {
     this.onConfigChanged = onConfigChanged;
     this.timer = null;
     this.commandsTimer = null;
+    this.lastConfigVersion = String(this.config.remoteConfigVersion || '');
   }
 
   get config() {
@@ -143,7 +145,7 @@ class RyabaAgent {
     });
 
     if (data.config && data.config_version) {
-      const currentVersion = String(this.config.remoteConfigVersion || '');
+      const currentVersion = String(this.config.remoteConfigVersion || this.lastConfigVersion || '');
       const nextVersion = String(data.config_version || '');
 
       if (currentVersion !== nextVersion) {
@@ -155,10 +157,7 @@ class RyabaAgent {
 
         writeRemoteConfig(nextConfig);
 
-        this.config = {
-          ...this.config,
-          ...nextConfig
-        };
+        this.lastConfigVersion = nextVersion;
 
         if (typeof this.onConfigChanged === 'function') this.onConfigChanged();
       }

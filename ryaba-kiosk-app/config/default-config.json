@@ -1,15 +1,13 @@
 {
-  "coreUrl": "https://ra.spo-kp.ru",
+  "coreUrl": "",
   "enrollmentToken": "",
-  "localHomeUrl": "https://ra.spo-kp.ru",
+  "localHomeUrl": "",
   "adminPin": "123456",
   "allowCamera": true,
   "allowMicrophone": true,
   "blockDownloads": true,
   "showAdminPanel": true,
-  "allowedOrigins": [
-    "https://ra.spo-kp.ru"
-  ],
+  "allowedOrigins": [],
   "allowedPaths": [
     "/*"
   ],
