@@ -214,6 +214,40 @@ export default function ServiceKioskPage({ user }) {
         await load();
     }
 
+    async function deleteSelectedDevice() {
+        if (!selectedDevice) return;
+
+        const label = selectedDevice.name || selectedDevice.hostname || `Киоск #${selectedDevice.id}`;
+        if (!window.confirm(`Удалить киоск "${label}" из Ryaba?\n\nСамо приложение на МОС не удалится, будет удалена только регистрация и история команд/событий.`)) {
+            return;
+        }
+
+        await axios.delete(`/api/admin/services/kiosks/devices/${selectedDevice.id}`);
+        setSelectedDeviceId(null);
+        await load();
+    }
+
+    async function deleteProfile(profile) {
+        if (!profile) return;
+
+        const usedCount = devices.filter((device) => Number(device.profile_id) === Number(profile.id)).length;
+        const suffix = usedCount
+            ? `\n\nК этому профилю привязано устройств: ${usedCount}. Их привязка к профилю будет очищена.`
+            : '';
+
+        if (!window.confirm(`Удалить профиль "${profile.name}"?${suffix}`)) {
+            return;
+        }
+
+        await axios.delete(`/api/admin/services/kiosks/profiles/${profile.id}`);
+
+        if (Number(tokenProfileId) === Number(profile.id)) {
+            setTokenProfileId('');
+        }
+
+        await load();
+    }
+
     const stats = useMemo(() => [
         ['Всего', dashboard?.total ?? 0],
         ['Онлайн', dashboard?.online ?? 0],
@@ -440,6 +474,34 @@ export default function ServiceKioskPage({ user }) {
                                     <code className="mt-2 block break-all">{plainToken}</code>
                                 </div>
                             ) : null}
+                        </section>
+
+                        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <h2 className="text-xl font-bold">Профили</h2>
+                            <div className="mt-4 flex flex-col gap-2">
+                                {profiles.map((profile) => (
+                                    <div key={profile.id} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                                        <div>
+                                            <div className="font-semibold text-slate-900">{profile.name}</div>
+                                            <div className="text-xs text-slate-500">
+                                                {profile.is_default ? 'Профиль по умолчанию · ' : ''}
+                                                {profile.home_url || 'Без домашнего сайта'}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => deleteProfile(profile)}
+                                            className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-200"
+                                        >
+                                            Удалить
+                                        </button>
+                                    </div>
+                                ))}
+                                {!profiles.length ? (
+                                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
+                                        Профили пока не созданы.
+                                    </div>
+                                ) : null}
+                            </div>
                         </section>
 
                         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

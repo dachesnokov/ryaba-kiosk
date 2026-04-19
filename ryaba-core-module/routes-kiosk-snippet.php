@@ -18,10 +18,12 @@ Route::middleware(['auth:sanctum'])->prefix('admin/services/kiosks')->group(func
     Route::post('/devices/{device}/approve', [KioskAdminController::class, 'approve']);
     Route::patch('/devices/{device}', [KioskAdminController::class, 'updateDevice']);
     Route::post('/devices/{device}/command', [KioskAdminController::class, 'createCommand']);
+    Route::delete('/devices/{device}', [KioskAdminController::class, 'deleteDevice']);
 
     Route::get('/profiles', [KioskAdminController::class, 'profiles']);
     Route::post('/profiles', [KioskAdminController::class, 'saveProfile']);
     Route::patch('/profiles/{profile}', [KioskAdminController::class, 'saveProfile']);
+    Route::delete('/profiles/{profile}', [KioskAdminController::class, 'deleteProfile']);
 
     Route::post('/enrollment-tokens', [KioskAdminController::class, 'createEnrollmentToken']);
 });

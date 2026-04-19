@@ -114,6 +114,13 @@ class KioskAdminController extends Controller
         return response()->json(['ok' => true, 'command' => $command]);
     }
 
+    public function deleteDevice(KioskDevice $device)
+    {
+        $device->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
     public function profiles()
     {
         return response()->json([
@@ -146,6 +153,33 @@ class KioskAdminController extends Controller
         $profile->save();
 
         return response()->json(['ok' => true, 'profile' => $profile]);
+    }
+
+    public function deleteProfile(KioskProfile $profile)
+    {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($profile) {
+            KioskDevice::query()
+                ->where('profile_id', $profile->id)
+                ->update(['profile_id' => null]);
+
+            KioskEnrollmentToken::query()
+                ->where('profile_id', $profile->id)
+                ->update(['profile_id' => null]);
+
+            $wasDefault = (bool) $profile->is_default;
+
+            $profile->delete();
+
+            if ($wasDefault) {
+                $next = KioskProfile::query()->orderBy('id')->first();
+                if ($next) {
+                    $next->is_default = true;
+                    $next->save();
+                }
+            }
+        });
+
+        return response()->json(['ok' => true]);
     }
 
     public function createEnrollmentToken(Request $request)
