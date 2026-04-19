@@ -93,21 +93,10 @@ export ELECTRON_DISABLE_SECURITY_WARNINGS=true
 export ELECTRON_ENABLE_LOGGING=1
 export ELECTRON_ENABLE_STACK_DUMPING=1
 
-if [ -z "${DISPLAY:-}" ]; then
-  if [ -e /tmp/.X11-unix/X1 ]; then
-    export DISPLAY=:1
-  elif [ -e /tmp/.X11-unix/X0 ]; then
-    export DISPLAY=:0
-  fi
-fi
-
 APP="/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell"
 
 sleep 5
 
-echo "DISPLAY=${DISPLAY:-}"
-echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
-echo "XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-}"
 echo "Starting: $APP"
 
 if [ ! -x "$APP" ]; then
@@ -120,13 +109,17 @@ SH
 
 chmod 0755 /usr/local/bin/ryaba-kiosk-autostart
 
+rm -f /etc/xdg/autostart/ryaba-kiosk-shell.desktop
+rm -f /usr/share/xsessions/ryaba-kiosk.desktop
+rm -f /usr/local/bin/ryaba-kiosk-session
+
 install -d -m 0755 /home/$KIOSK_USER/.config/autostart
 
 cat > /home/$KIOSK_USER/.config/autostart/ryaba-kiosk-shell.desktop <<AUTOSTART
 [Desktop Entry]
 Type=Application
 Name=Ryaba Kiosk Shell
-Comment=Start Ryaba Kiosk Shell after Plasma login
+Comment=Start Ryaba Kiosk Shell only for ryaba-kiosk
 Exec=/usr/local/bin/ryaba-kiosk-autostart
 Terminal=false
 X-KDE-autostart-after=panel
@@ -134,66 +127,6 @@ X-KDE-StartupNotify=false
 AUTOSTART
 
 chown -R "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.config || true
-
-mkdir -p /etc/xdg/autostart
-
-cat > /etc/xdg/autostart/ryaba-kiosk-shell.desktop <<AUTOSTART
-[Desktop Entry]
-Type=Application
-Name=Ryaba Kiosk Shell
-Comment=Start Ryaba Kiosk Shell for ryaba-kiosk user
-Exec=/usr/local/bin/ryaba-kiosk-autostart
-Terminal=false
-OnlyShowIn=KDE;
-X-KDE-autostart-after=panel
-X-KDE-StartupNotify=false
-AUTOSTART
-
-chmod 0644 /etc/xdg/autostart/ryaba-kiosk-shell.desktop
-
-mkdir -p /var/lib/AccountsService/users
-
-cat > /home/$KIOSK_USER/.dmrc <<DMRC
-[Desktop]
-Session=01plasma
-DMRC
-chown "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.dmrc || true
-
-cat > /var/lib/AccountsService/users/$KIOSK_USER <<ACCOUNT
-[User]
-Language=ru_RU.UTF-8
-Session=01plasma
-XSession=01plasma
-SystemAccount=false
-ACCOUNT
-chmod 0644 /var/lib/AccountsService/users/$KIOSK_USER || true
-
-if id teacher >/dev/null 2>&1; then
-  cat > /home/teacher/.dmrc <<'DMRC'
-[Desktop]
-Session=01plasma
-DMRC
-  chown teacher:teacher /home/teacher/.dmrc || true
-
-  cat > /var/lib/AccountsService/users/teacher <<'ACCOUNT'
-[User]
-Language=ru_RU.UTF-8
-Session=01plasma
-XSession=01plasma
-SystemAccount=false
-ACCOUNT
-  chmod 0644 /var/lib/AccountsService/users/teacher || true
-fi
-
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/20-ryaba-kiosk-user.conf <<'SDDM'
-[Users]
-MinimumUid=500
-MaximumUid=65000
-HideUsers=
-RememberLastUser=false
-RememberLastSession=false
-SDDM
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
