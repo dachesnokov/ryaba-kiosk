@@ -243,7 +243,7 @@ app.whenReady().then(() => {
     try {
       const coreUrl = String(payload?.coreUrl || '').trim().replace(/\/$/, '');
       const enrollmentToken = String(payload?.enrollmentToken || '').trim();
-      const localHomeUrl = String(payload?.localHomeUrl || coreUrl).trim().replace(/\/$/, '');
+      const localHomeUrl = coreUrl;
 
       if (!coreUrl || !enrollmentToken) {
         return { ok: false, error: 'Укажите адрес Ryaba Core и ключ регистрации.' };

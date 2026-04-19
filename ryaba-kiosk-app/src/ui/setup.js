@@ -3,8 +3,7 @@ const $ = (id) => document.getElementById(id);
 $('save').onclick = async () => {
   const payload = {
     coreUrl: $('coreUrl').value.trim().replace(/\/$/, ''),
-    enrollmentToken: $('enrollmentToken').value.trim(),
-    localHomeUrl: $('homeUrl').value.trim().replace(/\/$/, '')
+    enrollmentToken: $('enrollmentToken').value.trim()
   };
 
   if (!payload.coreUrl || !payload.enrollmentToken) {

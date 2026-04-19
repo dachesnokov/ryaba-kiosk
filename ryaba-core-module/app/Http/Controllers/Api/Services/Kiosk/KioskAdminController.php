@@ -82,14 +82,30 @@ class KioskAdminController extends Controller
             'config_override' => ['nullable', 'array'],
         ]);
 
+        $shouldBumpConfigVersion = false;
+
         if (array_key_exists('config_override', $data)) {
             $meta = $device->meta ?: [];
             $meta['config_override'] = $data['config_override'] ?: [];
+            $meta['config_updated_at'] = now()->timestamp;
             $device->meta = $meta;
+            $shouldBumpConfigVersion = true;
             unset($data['config_override']);
         }
 
+        if (array_key_exists('profile_id', $data) && (string) ($data['profile_id'] ?? '') !== (string) ($device->profile_id ?? '')) {
+            $meta = $device->meta ?: [];
+            $meta['config_updated_at'] = now()->timestamp;
+            $device->meta = $meta;
+            $shouldBumpConfigVersion = true;
+        }
+
         $device->fill($data);
+
+        if ($shouldBumpConfigVersion) {
+            $device->updated_at = now();
+        }
+
         $device->save();
 
         return response()->json(['ok' => true, 'device' => $device->fresh('profile')]);

@@ -5,14 +5,29 @@ APP_DIR="/opt/Ryaba Kiosk Shell"
 HELPER_SRC="${APP_DIR}/resources/helper/ryaba-kiosk-helper.py"
 KIOSK_USER="ryaba-kiosk"
 
-SHELL_PATH="/bin/false"
-[ -x /usr/sbin/nologin ] && SHELL_PATH="/usr/sbin/nologin"
-[ -x /sbin/nologin ] && SHELL_PATH="/sbin/nologin"
+SHELL_PATH="/bin/bash"
 
 if ! id "${KIOSK_USER}" >/dev/null 2>&1; then
-  useradd -m -s "${SHELL_PATH}" "${KIOSK_USER}" || true
+  useradd -m -s "${SHELL_PATH}" -c "Ryaba Kiosk" "${KIOSK_USER}" || true
 else
-  usermod -s "${SHELL_PATH}" "${KIOSK_USER}" || true
+  usermod -s "${SHELL_PATH}" -c "Ryaba Kiosk" "${KIOSK_USER}" || true
+fi
+
+# Группы для камеры, звука, сети и локального управления.
+for group_name in video audio input plugdev network netdev wheel; do
+  if getent group "${group_name}" >/dev/null 2>&1; then
+    usermod -aG "${group_name}" "${KIOSK_USER}" || true
+  fi
+done
+
+# Чтобы учетная запись отображалась в графическом окне входа как отдельный пользователь.
+if [ -d /var/lib/AccountsService/users ] || mkdir -p /var/lib/AccountsService/users 2>/dev/null; then
+  cat > /var/lib/AccountsService/users/${KIOSK_USER} <<ACCOUNT
+[User]
+Session=ryaba-kiosk
+XSession=ryaba-kiosk
+SystemAccount=false
+ACCOUNT
 fi
 
 install -d -m 0755 /etc/ryaba-kiosk
