@@ -438,6 +438,12 @@ export default function ServiceKioskPage({ user }) {
                                         >
                                             Сбросить
                                         </button>
+                                        <button
+                                            onClick={deleteSelectedDevice}
+                                            className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
+                                        >
+                                            Удалить киоск
+                                        </button>
                                     </div>
                                 </div>
                             )}
