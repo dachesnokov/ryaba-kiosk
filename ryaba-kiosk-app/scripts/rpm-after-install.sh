@@ -67,104 +67,122 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-cat > /usr/local/bin/ryaba-kiosk-session <<'SH'
+cat > /usr/local/bin/ryaba-kiosk-autostart <<'SH'
 #!/usr/bin/env bash
-set -u
 
-export XDG_CURRENT_DESKTOP=RyabaKiosk
-export ELECTRON_DISABLE_SECURITY_WARNINGS=true
-export RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
+if [ "$(id -un)" != "ryaba-kiosk" ]; then
+  exit 0
+fi
 
-LOG_FILE="/var/lib/ryaba-kiosk/session.log"
-touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-session.log"
+mkdir -p /var/lib/ryaba-kiosk
+chmod 0777 /var/lib/ryaba-kiosk 2>/dev/null || true
+
+LOG_FILE="/var/lib/ryaba-kiosk/shell.log"
+touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-shell.log"
 chmod 0666 "$LOG_FILE" 2>/dev/null || true
 
 exec >> "$LOG_FILE" 2>&1
 
 echo
-echo "===== Ryaba Kiosk session started: $(date -Is) ====="
-echo "USER=$(id)"
-echo "DISPLAY=$DISPLAY"
-echo "XAUTHORITY=$XAUTHORITY"
+echo "===== Ryaba Kiosk autostart: $(date -Is) ====="
+id
+env | sort
 
-xset -dpms 2>/dev/null || true
-xset s off 2>/dev/null || true
-xset s noblank 2>/dev/null || true
+export RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
+export ELECTRON_DISABLE_SECURITY_WARNINGS=true
+export ELECTRON_ENABLE_LOGGING=1
+export ELECTRON_ENABLE_STACK_DUMPING=1
+
+if [ -z "${DISPLAY:-}" ]; then
+  if [ -e /tmp/.X11-unix/X1 ]; then
+    export DISPLAY=:1
+  elif [ -e /tmp/.X11-unix/X0 ]; then
+    export DISPLAY=:0
+  fi
+fi
 
 APP="/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell"
 
-while true; do
-  if [ -x "$APP" ]; then
-    if command -v dbus-run-session >/dev/null 2>&1; then
-      dbus-run-session -- "$APP" --disable-gpu
-    else
-      "$APP" --disable-gpu
-    fi
-  else
-    echo "ryaba-kiosk-shell not installed: $APP"
-    sleep 5
-  fi
+sleep 5
 
-  echo "Ryaba Kiosk exited with code $? at $(date -Is), restarting..."
-  sleep 2
-done
+echo "DISPLAY=${DISPLAY:-}"
+echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
+echo "XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-}"
+echo "Starting: $APP"
+
+if [ ! -x "$APP" ]; then
+  echo "ERROR: app not found: $APP"
+  exit 1
+fi
+
+exec "$APP" --disable-gpu --no-sandbox --ozone-platform=x11
 SH
-chmod 0755 /usr/local/bin/ryaba-kiosk-session
 
-install -d -m 0755 /usr/share/xsessions
-cat > /usr/share/xsessions/ryaba-kiosk.desktop <<'DESKTOP'
+chmod 0755 /usr/local/bin/ryaba-kiosk-autostart
+
+install -d -m 0755 /home/$KIOSK_USER/.config/autostart
+
+cat > /home/$KIOSK_USER/.config/autostart/ryaba-kiosk-shell.desktop <<AUTOSTART
 [Desktop Entry]
-Name=Ryaba Kiosk
-Comment=Ryaba managed kiosk shell
-Exec=/usr/local/bin/ryaba-kiosk-session
 Type=Application
-DesktopNames=RyabaKiosk
-DESKTOP
+Name=Ryaba Kiosk Shell
+Comment=Start Ryaba Kiosk Shell after Plasma login
+Exec=/usr/local/bin/ryaba-kiosk-autostart
+Terminal=false
+X-KDE-autostart-after=panel
+X-KDE-StartupNotify=false
+AUTOSTART
+
+chown -R "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.config || true
+
+mkdir -p /etc/xdg/autostart
+
+cat > /etc/xdg/autostart/ryaba-kiosk-shell.desktop <<AUTOSTART
+[Desktop Entry]
+Type=Application
+Name=Ryaba Kiosk Shell
+Comment=Start Ryaba Kiosk Shell for ryaba-kiosk user
+Exec=/usr/local/bin/ryaba-kiosk-autostart
+Terminal=false
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel
+X-KDE-StartupNotify=false
+AUTOSTART
+
+chmod 0644 /etc/xdg/autostart/ryaba-kiosk-shell.desktop
 
 mkdir -p /var/lib/AccountsService/users
-cat > /var/lib/AccountsService/users/$KIOSK_USER <<ACCOUNT
-[User]
-Language=ru_RU.UTF-8
-Session=ryaba-kiosk
-XSession=ryaba-kiosk
-SystemAccount=false
-ACCOUNT
-chmod 0644 /var/lib/AccountsService/users/$KIOSK_USER
 
 cat > /home/$KIOSK_USER/.dmrc <<DMRC
 [Desktop]
-Session=ryaba-kiosk
+Session=01plasma
 DMRC
 chown "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.dmrc || true
 
-# Возвращаем обычных пользователей в Plasma, чтобы teacher и другие не ловили kiosk-session.
-PLASMA_SESSION=""
-for file in /usr/share/xsessions/01plasma.desktop /usr/share/xsessions/plasma.desktop /usr/share/xsessions/plasma-x11.desktop /usr/share/xsessions/startplasma-x11.desktop; do
-  if [ -f "$file" ]; then
-    PLASMA_SESSION="$(basename "$file" .desktop)"
-    break
-  fi
-done
-
-if [ -n "$PLASMA_SESSION" ]; then
-  for user_name in teacher; do
-    if id "$user_name" >/dev/null 2>&1; then
-      cat > /home/$user_name/.dmrc <<DMRC
-[Desktop]
-Session=$PLASMA_SESSION
-DMRC
-      chown "$user_name:$user_name" /home/$user_name/.dmrc || true
-
-      cat > /var/lib/AccountsService/users/$user_name <<ACCOUNT
+cat > /var/lib/AccountsService/users/$KIOSK_USER <<ACCOUNT
 [User]
 Language=ru_RU.UTF-8
-Session=$PLASMA_SESSION
-XSession=$PLASMA_SESSION
+Session=01plasma
+XSession=01plasma
 SystemAccount=false
 ACCOUNT
-      chmod 0644 /var/lib/AccountsService/users/$user_name || true
-    fi
-  done
+chmod 0644 /var/lib/AccountsService/users/$KIOSK_USER || true
+
+if id teacher >/dev/null 2>&1; then
+  cat > /home/teacher/.dmrc <<'DMRC'
+[Desktop]
+Session=01plasma
+DMRC
+  chown teacher:teacher /home/teacher/.dmrc || true
+
+  cat > /var/lib/AccountsService/users/teacher <<'ACCOUNT'
+[User]
+Language=ru_RU.UTF-8
+Session=01plasma
+XSession=01plasma
+SystemAccount=false
+ACCOUNT
+  chmod 0644 /var/lib/AccountsService/users/teacher || true
 fi
 
 mkdir -p /etc/sddm.conf.d
