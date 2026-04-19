@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, session, dialog, globalShortcut, screen } = require('electron');
 
 try {
   app.disableHardwareAcceleration();
@@ -102,11 +102,37 @@ function sendBlocked(reason, url) {
   console.warn('[security] blocked:', reason, url);
 }
 
+function getKioskBounds() {
+  try {
+    const display = screen.getPrimaryDisplay();
+    const bounds = display?.bounds || display?.workArea || {};
+    return {
+      x: Number.isFinite(bounds.x) ? bounds.x : 0,
+      y: Number.isFinite(bounds.y) ? bounds.y : 0,
+      width: Math.max(1024, Number.isFinite(bounds.width) ? bounds.width : 1920),
+      height: Math.max(768, Number.isFinite(bounds.height) ? bounds.height : 1080)
+    };
+  } catch (_) {
+    return { x: 0, y: 0, width: 1920, height: 1080 };
+  }
+}
+
+
 function createMainWindow() {
   config = loadConfig();
+  const kioskBounds = getKioskBounds();
 
   mainWindow = new BrowserWindow({
     show: false,
+    x: kioskBounds.x,
+    y: kioskBounds.y,
+    width: kioskBounds.width,
+    height: kioskBounds.height,
+    minWidth: kioskBounds.width,
+    minHeight: kioskBounds.height,
+    frame: false,
+    resizable: false,
+    movable: false,
     kiosk: true,
     fullscreen: true,
     autoHideMenuBar: true,
@@ -122,7 +148,17 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    try {
+      const bounds = getKioskBounds();
+      mainWindow.setBounds(bounds, false);
+      mainWindow.setFullScreen(true);
+      mainWindow.setKiosk(true);
+      mainWindow.focus();
+    } catch (_) {}
+
+    mainWindow.show();
+  });
 
   mainWindow.webContents.on('did-navigate', (_event, url) => {
     global.__RYABA_CURRENT_URL__ = url;

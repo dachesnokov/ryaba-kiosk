@@ -24,7 +24,9 @@ for group_name in video audio input plugdev network netdev wheel; do
 done
 
 install -d -m 0755 /etc/ryaba-kiosk
-install -d -m 0777 /var/lib/ryaba-kiosk
+install -d -o "$KIOSK_USER" -g "$KIOSK_USER" -m 0775 /var/lib/ryaba-kiosk
+chown -R "$KIOSK_USER:$KIOSK_USER" /var/lib/ryaba-kiosk || true
+chmod -R u+rwX,g+rwX /var/lib/ryaba-kiosk || true
 install -d -m 0755 /opt/ryaba-kiosk
 
 cat > /etc/ryaba-kiosk/config.json <<'JSON'
@@ -94,6 +96,13 @@ export NO_AT_BRIDGE=1
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 xset s noblank 2>/dev/null || true
+
+if command -v xrandr >/dev/null 2>&1; then
+  XRANDR_OUTPUT="$(xrandr | awk '/ connected/{print $1; exit}')"
+  if [ -n "$XRANDR_OUTPUT" ]; then
+    xrandr --output "$XRANDR_OUTPUT" --auto 2>/dev/null || true
+  fi
+fi
 
 APP="/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell"
 
@@ -179,6 +188,9 @@ Environment=HOME=/home/ryaba-kiosk
 Environment=USER=ryaba-kiosk
 Environment=LOGNAME=ryaba-kiosk
 Environment=RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
+ExecStartPre=+/usr/bin/install -d -o ryaba-kiosk -g ryaba-kiosk -m 0775 /var/lib/ryaba-kiosk
+ExecStartPre=+/usr/bin/chown -R ryaba-kiosk:ryaba-kiosk /var/lib/ryaba-kiosk
+ExecStartPre=+/usr/bin/chmod -R u+rwX,g+rwX /var/lib/ryaba-kiosk
 
 TTYPath=/dev/tty7
 TTYReset=yes
