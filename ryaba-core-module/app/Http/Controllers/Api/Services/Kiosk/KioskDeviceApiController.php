@@ -130,10 +130,25 @@ class KioskDeviceApiController extends Controller
 
         $profile = $device->profile ?: KioskProfile::query()->where('is_default', true)->first();
 
+        $config = $profile ? $profile->toClientConfig() : null;
+        $override = data_get($device->meta ?: [], 'config_override', []);
+
+        if ($config && is_array($override) && !empty($override)) {
+            $cleanOverride = array_filter($override, static fn ($value) => $value !== null && $value !== '');
+            $config = array_replace_recursive($config, $cleanOverride);
+        }
+
+        if ($config) {
+            $config['coreUrl'] = config('app.url');
+        }
+
+        $profileVersion = optional($profile?->updated_at)->timestamp ?: 0;
+        $deviceVersion = optional($device->updated_at)->timestamp ?: 0;
+
         return response()->json([
             'status' => $device->status,
-            'config_version' => optional($profile?->updated_at)->timestamp ?: time(),
-            'config' => $profile ? $profile->toClientConfig() : null,
+            'config_version' => max($profileVersion, $deviceVersion, time()),
+            'config' => $config,
         ]);
     }
 

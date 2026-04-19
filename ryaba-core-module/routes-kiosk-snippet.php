@@ -13,6 +13,7 @@ Route::prefix('services/kiosks')->group(function () {
 
 Route::middleware(['auth:sanctum'])->prefix('admin/services/kiosks')->group(function () {
     Route::get('/dashboard', [KioskAdminController::class, 'dashboard']);
+    Route::get('/download-rpm', [KioskAdminController::class, 'downloadRpm']);
     Route::get('/devices', [KioskAdminController::class, 'devices']);
     Route::post('/devices/{device}/approve', [KioskAdminController::class, 'approve']);
     Route::patch('/devices/{device}', [KioskAdminController::class, 'updateDevice']);

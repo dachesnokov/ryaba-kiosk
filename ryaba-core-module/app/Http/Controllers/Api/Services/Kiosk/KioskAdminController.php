@@ -31,6 +31,26 @@ class KioskAdminController extends Controller
         ]);
     }
 
+    public function downloadRpm()
+    {
+        $files = glob(storage_path('app/public/kiosk/ryaba-kiosk-shell-*.rpm')) ?: [];
+
+        usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
+
+        $file = $files[0] ?? null;
+
+        if (!$file || !is_file($file)) {
+            return response()->json([
+                'message' => 'RPM-файл не найден. Скопируйте пакет в storage/app/public/kiosk/.',
+            ], 404);
+        }
+
+        return response()->download($file, basename($file), [
+            'Content-Type' => 'application/x-rpm',
+        ]);
+    }
+
+
     public function devices()
     {
         $devices = KioskDevice::query()
@@ -59,7 +79,15 @@ class KioskAdminController extends Controller
             'building_id' => ['nullable', 'integer'],
             'cabinet_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:50'],
+            'config_override' => ['nullable', 'array'],
         ]);
+
+        if (array_key_exists('config_override', $data)) {
+            $meta = $device->meta ?: [];
+            $meta['config_override'] = $data['config_override'] ?: [];
+            $device->meta = $meta;
+            unset($data['config_override']);
+        }
 
         $device->fill($data);
         $device->save();
