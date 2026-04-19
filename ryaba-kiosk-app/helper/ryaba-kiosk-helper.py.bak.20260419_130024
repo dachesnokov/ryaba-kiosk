@@ -124,18 +124,13 @@ def prepare_socket(path):
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.bind(path)
 
-    # В режиме полноценного киоска приложение обычно запускается от ryaba-kiosk.
-    # Но при ручном запуске из меню МОС оно может идти от текущего пользователя teacher/admin.
-    # Поэтому для MVP открываем локальный unix-socket всем локальным пользователям.
-    # Сам helper всё равно разрешает только ограниченный набор безопасных действий.
     try:
         uid = pwd.getpwnam(KIOSK_USER).pw_uid
         gid = grp.getgrnam(KIOSK_GROUP).gr_gid
         os.chown(path, uid, gid)
+        os.chmod(path, 0o660)
     except Exception:
-        pass
-
-    os.chmod(path, 0o666)
+        os.chmod(path, 0o666)
 
     sock.listen(20)
     return sock
