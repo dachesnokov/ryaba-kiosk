@@ -23,13 +23,19 @@ function ensureDir(dir) {
 }
 
 function getStateDir() {
+  if (process.env.RYABA_KIOSK_STATE_DIR) {
+    return process.env.RYABA_KIOSK_STATE_DIR;
+  }
+
+  // Общий state нужен, чтобы настройка, сделанная из teacher или из ryaba-kiosk,
+  // не терялась при смене пользователя.
+  const shared = '/var/lib/ryaba-kiosk';
+
   try {
-    ensureDir(STATE_DIR);
-    fs.accessSync(STATE_DIR, fs.constants.W_OK);
-    return STATE_DIR;
+    fs.mkdirSync(shared, { recursive: true });
+    return shared;
   } catch (_) {
-    ensureDir(USER_STATE_DIR);
-    return USER_STATE_DIR;
+    return path.join(os.homedir(), '.local', 'share', 'ryaba-kiosk');
   }
 }
 
@@ -59,7 +65,7 @@ function writeLocalConfig(config) {
   fs.writeFileSync(file, JSON.stringify(config, null, 2));
   try {
     fs.chownSync(file, process.getuid?.() ?? 0, process.getgid?.() ?? 0);
-    fs.chmodSync(file, 0o600);
+    fs.chmodSync(file, 0o666);
   } catch (_) {}
 }
 
@@ -79,7 +85,7 @@ function writeDeviceState(state) {
   const file = path.join(stateDir, 'device.json');
   fs.writeFileSync(file, JSON.stringify(state, null, 2));
   try {
-    fs.chmodSync(file, 0o600);
+    fs.chmodSync(file, 0o666);
   } catch (_) {}
 }
 

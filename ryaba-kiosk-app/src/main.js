@@ -1,4 +1,10 @@
 const { app, BrowserWindow, ipcMain, session, dialog, globalShortcut } = require('electron');
+
+try {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-features', 'UseOzonePlatform,Vulkan');
+} catch (_) {}
 const path = require('path');
 const { loadConfig, writeLocalConfig } = require('./config');
 const { isAllowedUrl, getSafeHomeUrl } = require('./security');
@@ -54,6 +60,58 @@ function createMainWindow() {
       event.preventDefault();
       sendBlocked('will-navigate', url);
     }
+  });
+
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    if (!isMainFrame) return;
+
+    const html = `
+      <!doctype html>
+      <html lang="ru">
+      <head>
+        <meta charset="utf-8">
+        <title>Ryaba Kiosk · Ошибка загрузки</title>
+        <style>
+          body {
+            margin: 0;
+            display: grid;
+            min-height: 100vh;
+            place-items: center;
+            background: #0f172a;
+            color: white;
+            font-family: system-ui, sans-serif;
+          }
+          .card {
+            max-width: 760px;
+            border-radius: 28px;
+            background: rgba(255,255,255,.08);
+            padding: 32px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.25);
+          }
+          h1 { margin: 0 0 12px; font-size: 32px; }
+          pre {
+            white-space: pre-wrap;
+            color: #cbd5e1;
+            background: rgba(15,23,42,.75);
+            border-radius: 18px;
+            padding: 16px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Не удалось открыть сайт</h1>
+          <p>Киоск получил адрес, но страница не загрузилась.</p>
+          <pre>${errorCode}: ${errorDescription}
+${validatedUrl}</pre>
+          <p>Проверьте доступность сайта с МОС 12 и разрешенные домены в профиле Ryaba.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

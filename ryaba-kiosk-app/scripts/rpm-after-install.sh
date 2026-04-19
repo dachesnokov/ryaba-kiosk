@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="/opt/Ryaba Kiosk Shell"
+APP_NAME="Ryaba Kiosk Shell"
+APP_DIR="/opt/${APP_NAME}"
 HELPER_SRC="${APP_DIR}/resources/helper/ryaba-kiosk-helper.py"
 KIOSK_USER="ryaba-kiosk"
+KIOSK_PASSWORD="123456"
 
 SHELL_PATH="/bin/bash"
 
@@ -13,25 +15,16 @@ else
   usermod -s "${SHELL_PATH}" -c "Ryaba Kiosk" "${KIOSK_USER}" || true
 fi
 
-# Группы для камеры, звука, сети и локального управления.
+echo "${KIOSK_USER}:${KIOSK_PASSWORD}" | chpasswd || true
+
 for group_name in video audio input plugdev network netdev wheel; do
   if getent group "${group_name}" >/dev/null 2>&1; then
     usermod -aG "${group_name}" "${KIOSK_USER}" || true
   fi
 done
 
-# Чтобы учетная запись отображалась в графическом окне входа как отдельный пользователь.
-if [ -d /var/lib/AccountsService/users ] || mkdir -p /var/lib/AccountsService/users 2>/dev/null; then
-  cat > /var/lib/AccountsService/users/${KIOSK_USER} <<ACCOUNT
-[User]
-Session=ryaba-kiosk
-XSession=ryaba-kiosk
-SystemAccount=false
-ACCOUNT
-fi
-
 install -d -m 0755 /etc/ryaba-kiosk
-install -d -o "${KIOSK_USER}" -g "${KIOSK_USER}" -m 0700 /var/lib/ryaba-kiosk
+install -d -m 0777 /var/lib/ryaba-kiosk
 install -d -m 0755 /opt/ryaba-kiosk
 
 if [ ! -f /etc/ryaba-kiosk/config.json ]; then
@@ -78,27 +71,53 @@ UNIT
 
 cat > /usr/local/bin/ryaba-kiosk-session <<'SH'
 #!/usr/bin/env bash
-set -euo pipefail
+set -u
 
 export XDG_CURRENT_DESKTOP=RyabaKiosk
 export ELECTRON_DISABLE_SECURITY_WARNINGS=true
+export RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
+
+LOG_FILE="/var/log/ryaba-kiosk-session.log"
+touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-session.log"
+chmod 0666 "$LOG_FILE" 2>/dev/null || true
+
+exec >> "$LOG_FILE" 2>&1
+
+echo
+echo "===== Ryaba Kiosk session started: $(date -Is) ====="
+echo "USER=$(id)"
+echo "DISPLAY=${DISPLAY:-}"
+echo "XAUTHORITY=${XAUTHORITY:-}"
 
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 xset s noblank 2>/dev/null || true
 
+APP="/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell"
+
 while true; do
-  if command -v ryaba-kiosk-shell >/dev/null 2>&1; then
-    ryaba-kiosk-shell || true
-  elif [ -x "/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell" ]; then
-    "/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell" || true
+  if [ -x "$APP" ]; then
+    if command -v dbus-run-session >/dev/null 2>&1; then
+      dbus-run-session -- "$APP" --disable-gpu
+    else
+      "$APP" --disable-gpu
+    fi
+  elif command -v ryaba-kiosk-shell >/dev/null 2>&1; then
+    if command -v dbus-run-session >/dev/null 2>&1; then
+      dbus-run-session -- ryaba-kiosk-shell --disable-gpu
+    else
+      ryaba-kiosk-shell --disable-gpu
+    fi
   else
     echo "ryaba-kiosk-shell not installed"
     sleep 5
   fi
-  sleep 1
+
+  echo "Ryaba Kiosk exited with code $? at $(date -Is), restarting..."
+  sleep 2
 done
 SH
+
 chmod 0755 /usr/local/bin/ryaba-kiosk-session
 
 install -d -m 0755 /usr/share/xsessions
@@ -110,6 +129,32 @@ Exec=/usr/local/bin/ryaba-kiosk-session
 Type=Application
 DesktopNames=RyabaKiosk
 DESKTOP
+
+mkdir -p /var/lib/AccountsService/users
+cat > /var/lib/AccountsService/users/${KIOSK_USER} <<ACCOUNT
+[User]
+Language=ru_RU.UTF-8
+Session=ryaba-kiosk
+XSession=ryaba-kiosk
+SystemAccount=false
+ACCOUNT
+chmod 0644 /var/lib/AccountsService/users/${KIOSK_USER}
+
+cat > "/home/${KIOSK_USER}/.dmrc" <<DMRC
+[Desktop]
+Session=ryaba-kiosk
+DMRC
+chown "${KIOSK_USER}:${KIOSK_USER}" "/home/${KIOSK_USER}/.dmrc" || true
+
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/20-ryaba-kiosk-user.conf <<'SDDM'
+[Users]
+MinimumUid=500
+MaximumUid=65000
+HideUsers=
+RememberLastUser=false
+RememberLastSession=false
+SDDM
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
