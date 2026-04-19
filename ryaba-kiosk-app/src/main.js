@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, session, dialog, globalShortcut } = require('electron');
 const path = require('path');
-const { loadConfig } = require('./config');
+const { loadConfig, writeLocalConfig } = require('./config');
 const { isAllowedUrl, getSafeHomeUrl } = require('./security');
 const { callHelper } = require('./helperClient');
 const { RyabaAgent } = require('./agent');
@@ -80,6 +80,11 @@ function createMainWindow() {
       sendBlocked('download', item.getURL());
     }
   });
+
+  if (!config.coreUrl || !config.enrollmentToken) {
+    mainWindow.loadFile(path.join(__dirname, 'ui', 'setup.html'));
+    return;
+  }
 
   const homeUrl = getSafeHomeUrl(config);
   if (homeUrl === 'about:blank') {
@@ -219,6 +224,47 @@ app.whenReady().then(() => {
   ipcMain.handle('kiosk:reload', async () => {
     if (mainWindow) mainWindow.reload();
     return { ok: true };
+  });
+
+  ipcMain.handle('setup:save', async (_event, payload) => {
+    try {
+      const coreUrl = String(payload?.coreUrl || '').trim().replace(/\/$/, '');
+      const enrollmentToken = String(payload?.enrollmentToken || '').trim();
+      const localHomeUrl = String(payload?.localHomeUrl || coreUrl).trim().replace(/\/$/, '');
+
+      if (!coreUrl || !enrollmentToken) {
+        return { ok: false, error: 'Укажите адрес Ryaba Core и ключ регистрации.' };
+      }
+
+      let origin = coreUrl;
+      try {
+        origin = new URL(localHomeUrl || coreUrl).origin;
+      } catch (_) {}
+
+      writeLocalConfig({
+        coreUrl,
+        enrollmentToken,
+        localHomeUrl: localHomeUrl || coreUrl,
+        allowedOrigins: [origin],
+        allowedPaths: ['/*'],
+        savedAt: new Date().toISOString()
+      });
+
+      reloadConfig();
+
+      if (mainWindow) {
+        const target = getSafeHomeUrl(config);
+        if (target === 'about:blank') {
+          mainWindow.loadFile(path.join(__dirname, 'ui', 'offline.html'));
+        } else {
+          mainWindow.loadURL(target);
+        }
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
   });
 
   ipcMain.handle('kiosk:home', async () => {

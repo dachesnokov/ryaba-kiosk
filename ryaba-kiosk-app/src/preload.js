@@ -28,5 +28,6 @@ contextBridge.exposeInMainWorld('ryabaKiosk', {
   helper: (action, payload) => ipcRenderer.invoke('helper:call', action, payload),
   adminLogin: (pin) => ipcRenderer.invoke('admin:login', pin),
   reloadKiosk: () => ipcRenderer.invoke('kiosk:reload'),
-  goHome: () => ipcRenderer.invoke('kiosk:home')
+  goHome: () => ipcRenderer.invoke('kiosk:home'),
+  saveSetup: (payload) => ipcRenderer.invoke('setup:save', payload)
 });

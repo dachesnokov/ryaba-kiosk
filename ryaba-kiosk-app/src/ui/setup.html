@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Ryaba Kiosk · Подключение</title>
+  <link rel="stylesheet" href="./setup.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <div class="badge">Ryaba Kiosk</div>
+      <h1>Подключение киоска</h1>
+      <p class="lead">
+        Введите адрес Ryaba Core и ключ регистрации. После подключения настройки сайта будут загружаться из Ryaba.
+      </p>
+
+      <label>
+        Адрес Ryaba Core
+        <input id="coreUrl" value="https://ra.spo-kp.ru" />
+      </label>
+
+      <label>
+        Ключ регистрации
+        <input id="enrollmentToken" placeholder="Enrollment token" />
+      </label>
+
+      <label>
+        Стартовая страница до получения профиля
+        <input id="homeUrl" value="https://ra.spo-kp.ru" />
+      </label>
+
+      <button id="save">Подключить киоск</button>
+
+      <pre id="result"></pre>
+    </section>
+  </main>
+  <script src="./setup.js"></script>
+</body>
+</html>

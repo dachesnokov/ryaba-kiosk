@@ -36,16 +36,31 @@ function getStateDir() {
 function loadConfig() {
   const packagedDefault = path.join(__dirname, '..', 'config', 'default-config.json');
   const defaults = safeReadJson(packagedDefault, {});
-  const etc = safeReadJson(ETC_CONFIG, {});
   const stateDir = getStateDir();
+  const etc = safeReadJson(ETC_CONFIG, {});
+  const local = safeReadJson(path.join(stateDir, 'local-config.json'), {});
   const remote = safeReadJson(path.join(stateDir, 'remote-config.json'), {});
   return {
     ...defaults,
     ...etc,
+    ...local,
     ...remote,
-    allowedOrigins: remote.allowedOrigins || etc.allowedOrigins || defaults.allowedOrigins || [],
-    allowedPaths: remote.allowedPaths || etc.allowedPaths || defaults.allowedPaths || ['/*']
+    coreUrl: remote.coreUrl || local.coreUrl || etc.coreUrl || defaults.coreUrl || '',
+    enrollmentToken: local.enrollmentToken || etc.enrollmentToken || defaults.enrollmentToken || '',
+    allowedOrigins: remote.allowedOrigins || local.allowedOrigins || etc.allowedOrigins || defaults.allowedOrigins || [],
+    allowedPaths: remote.allowedPaths || local.allowedPaths || etc.allowedPaths || defaults.allowedPaths || ['/*']
   };
+}
+
+function writeLocalConfig(config) {
+  const stateDir = getStateDir();
+  ensureDir(stateDir);
+  const file = path.join(stateDir, 'local-config.json');
+  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  try {
+    fs.chownSync(file, process.getuid?.() ?? 0, process.getgid?.() ?? 0);
+    fs.chmodSync(file, 0o600);
+  } catch (_) {}
 }
 
 function writeRemoteConfig(config) {
@@ -73,6 +88,10 @@ module.exports = {
   STATE_DIR,
   getStateDir,
   loadConfig,
+  writeLocalConfig,
+  writeLocalConfig,
+  writeLocalConfig,
+  writeLocalConfig,
   writeRemoteConfig,
   readDeviceState,
   writeDeviceState

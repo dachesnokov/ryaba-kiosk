@@ -17,27 +17,52 @@ function sha256(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
-function getMacAddresses() {
+function getNetworkSnapshot() {
   const interfaces = os.networkInterfaces();
-  const result = [];
+  const macAddresses = [];
+  const localIps = [];
+
   for (const [name, rows] of Object.entries(interfaces)) {
     for (const row of rows || []) {
-      if (row && row.mac && row.mac !== '00:00:00:00:00:00') {
-        result.push({ name, mac: row.mac, address: row.address, family: row.family });
+      if (!row || row.internal) continue;
+
+      if (row.mac && row.mac !== '00:00:00:00:00:00') {
+        macAddresses.push({
+          name,
+          mac: row.mac,
+          address: row.address,
+          family: row.family,
+          cidr: row.cidr || null
+        });
+      }
+
+      if (row.address && (row.family === 'IPv4' || row.family === 4)) {
+        localIps.push({
+          name,
+          address: row.address,
+          cidr: row.cidr || null
+        });
       }
     }
   }
-  return result;
+
+  const primaryIp = localIps.find((row) => !String(row.address).startsWith('127.'))?.address || localIps[0]?.address || null;
+
+  return { macAddresses, localIps, primaryIp };
 }
 
 function devicePayload() {
+  const network = getNetworkSnapshot();
+
   return {
     hostname: os.hostname(),
     platform: os.platform(),
     arch: os.arch(),
     release: os.release(),
     machineIdHash: sha256(readMachineId()),
-    macAddresses: getMacAddresses(),
+    macAddresses: network.macAddresses,
+    localIps: network.localIps,
+    primaryIp: network.primaryIp,
     appVersion: require('../package.json').version
   };
 }
@@ -118,12 +143,18 @@ class RyabaAgent {
     });
 
     if (data.config && data.config_version) {
-      writeRemoteConfig({
-        ...data.config,
-        remoteConfigVersion: data.config_version,
-        fetchedAt: new Date().toISOString()
-      });
-      if (typeof this.onConfigChanged === 'function') this.onConfigChanged();
+      const currentVersion = String(this.config.remoteConfigVersion || '');
+      const nextVersion = String(data.config_version || '');
+
+      if (currentVersion !== nextVersion) {
+        writeRemoteConfig({
+          ...data.config,
+          remoteConfigVersion: data.config_version,
+          fetchedAt: new Date().toISOString()
+        });
+
+        if (typeof this.onConfigChanged === 'function') this.onConfigChanged();
+      }
     }
 
     return data;

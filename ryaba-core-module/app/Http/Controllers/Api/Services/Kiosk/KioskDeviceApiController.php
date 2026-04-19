@@ -42,6 +42,8 @@ class KioskDeviceApiController extends Controller
             'device.platform' => ['nullable', 'string', 'max:255'],
             'device.appVersion' => ['nullable', 'string', 'max:255'],
             'device.macAddresses' => ['nullable', 'array'],
+            'device.localIps' => ['nullable', 'array'],
+            'device.primaryIp' => ['nullable', 'string', 'max:64'],
         ]);
 
         $tokenHash = $this->hashToken($data['enrollment_token']);
@@ -73,7 +75,7 @@ class KioskDeviceApiController extends Controller
             'os_version' => $payload['release'] ?? null,
             'app_version' => $payload['appVersion'] ?? null,
             'mac_addresses' => $payload['macAddresses'] ?? [],
-            'ip_address' => $request->ip(),
+            'ip_address' => $payload['primaryIp'] ?? $request->ip(),
             'profile_id' => $device->profile_id ?: $enrollment->profile_id,
             'last_payload' => $payload,
             'last_seen_at' => now(),
@@ -106,7 +108,7 @@ class KioskDeviceApiController extends Controller
 
         $device->fill([
             'last_seen_at' => now(),
-            'ip_address' => $request->ip(),
+            'ip_address' => $payload['primaryIp'] ?? $device->ip_address ?? $request->ip(),
             'hostname' => $payload['hostname'] ?? $device->hostname,
             'os_name' => $payload['platform'] ?? $device->os_name,
             'os_version' => $payload['release'] ?? $device->os_version,

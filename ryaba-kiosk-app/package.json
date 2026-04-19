@@ -56,7 +56,9 @@
       "depends": [
         "NetworkManager",
         "python3"
-      ]
+      ],
+      "afterInstall": "scripts/rpm-after-install.sh",
+      "afterRemove": "scripts/rpm-after-remove.sh"
     }
   },
   "homepage": "https://ra.spo-kp.ru"
