@@ -147,16 +147,14 @@ class RyabaAgent {
       const nextVersion = String(data.config_version || '');
 
       if (currentVersion !== nextVersion) {
-        const nextConfig = {
+        const nextConfig = sanitizeRemoteConfig({
           ...data.config,
           remoteConfigVersion: data.config_version,
           fetchedAt: new Date().toISOString()
-        };
+        });
 
         writeRemoteConfig(nextConfig);
 
-        // Важно: обновляем конфиг в памяти, иначе агент будет считать
-        // один и тот же remoteConfigVersion новым на каждом heartbeat.
         this.config = {
           ...this.config,
           ...nextConfig

@@ -2,24 +2,24 @@
 set -euo pipefail
 
 APP_NAME="Ryaba Kiosk Shell"
-APP_DIR="/opt/$APP_NAME"
-HELPER_SRC="$APP_DIR/resources/helper/ryaba-kiosk-helper.py"
+APP_DIR="/opt/${APP_NAME}"
+HELPER_SRC="${APP_DIR}/resources/helper/ryaba-kiosk-helper.py"
 KIOSK_USER="ryaba-kiosk"
 KIOSK_PASSWORD="123456"
 
 SHELL_PATH="/bin/bash"
 
-if ! id "$KIOSK_USER" >/dev/null 2>&1; then
-  useradd -m -s "$SHELL_PATH" -c "Ryaba Kiosk" "$KIOSK_USER" || true
+if ! id "${KIOSK_USER}" >/dev/null 2>&1; then
+  useradd -m -s "${SHELL_PATH}" -c "Ryaba Kiosk" "${KIOSK_USER}" || true
 else
-  usermod -s "$SHELL_PATH" -c "Ryaba Kiosk" "$KIOSK_USER" || true
+  usermod -s "${SHELL_PATH}" -c "Ryaba Kiosk" "${KIOSK_USER}" || true
 fi
 
-echo "$KIOSK_USER:$KIOSK_PASSWORD" | chpasswd || true
+echo "${KIOSK_USER}:${KIOSK_PASSWORD}" | chpasswd || true
 
 for group_name in video audio input plugdev network netdev wheel; do
-  if getent group "$group_name" >/dev/null 2>&1; then
-    usermod -aG "$group_name" "$KIOSK_USER" || true
+  if getent group "${group_name}" >/dev/null 2>&1; then
+    usermod -aG "${group_name}" "${KIOSK_USER}" || true
   fi
 done
 
@@ -48,8 +48,8 @@ JSON
   chmod 0644 /etc/ryaba-kiosk/config.json
 fi
 
-if [ -f "$HELPER_SRC" ]; then
-  install -m 0755 "$HELPER_SRC" /opt/ryaba-kiosk/ryaba-kiosk-helper.py
+if [ -f "${HELPER_SRC}" ]; then
+  install -m 0755 "${HELPER_SRC}" /opt/ryaba-kiosk/ryaba-kiosk-helper.py
 fi
 
 cat > /etc/systemd/system/ryaba-kiosk-helper.service <<'UNIT'
@@ -86,8 +86,8 @@ exec >> "$LOG_FILE" 2>&1
 echo
 echo "===== Ryaba Kiosk session started: $(date -Is) ====="
 echo "USER=$(id)"
-echo "DISPLAY=$DISPLAY"
-echo "XAUTHORITY=$XAUTHORITY"
+echo "DISPLAY=${DISPLAY:-}"
+echo "XAUTHORITY=${XAUTHORITY:-}"
 
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
@@ -124,42 +124,42 @@ DesktopNames=RyabaKiosk
 DESKTOP
 
 mkdir -p /var/lib/AccountsService/users
-cat > /var/lib/AccountsService/users/$KIOSK_USER <<ACCOUNT
+cat > /var/lib/AccountsService/users/${KIOSK_USER} <<ACCOUNT
 [User]
 Language=ru_RU.UTF-8
 Session=ryaba-kiosk
 XSession=ryaba-kiosk
 SystemAccount=false
 ACCOUNT
-chmod 0644 /var/lib/AccountsService/users/$KIOSK_USER
+chmod 0644 /var/lib/AccountsService/users/${KIOSK_USER}
 
-cat > "/home/$KIOSK_USER/.dmrc" <<DMRC
+cat > "/home/${KIOSK_USER}/.dmrc" <<DMRC
 [Desktop]
 Session=ryaba-kiosk
 DMRC
-chown "$KIOSK_USER:$KIOSK_USER" "/home/$KIOSK_USER/.dmrc" || true
+chown "${KIOSK_USER}:${KIOSK_USER}" "/home/${KIOSK_USER}/.dmrc" || true
 
 # Не ломаем teacher: возвращаем ему обычную Plasma-сессию, если она есть.
 PLASMA_SESSION=""
 for candidate in plasma plasma-x11 startplasma-x11; do
-  if [ -f "/usr/share/xsessions/$candidate.desktop" ]; then
-    PLASMA_SESSION="$candidate"
+  if [ -f "/usr/share/xsessions/${candidate}.desktop" ]; then
+    PLASMA_SESSION="${candidate}"
     break
   fi
 done
 
-if id teacher >/dev/null 2>&1 && [ -n "$PLASMA_SESSION" ]; then
+if id teacher >/dev/null 2>&1 && [ -n "${PLASMA_SESSION}" ]; then
   cat > /home/teacher/.dmrc <<DMRC
 [Desktop]
-Session=$PLASMA_SESSION
+Session=${PLASMA_SESSION}
 DMRC
   chown teacher:teacher /home/teacher/.dmrc || true
 
   cat > /var/lib/AccountsService/users/teacher <<ACCOUNT
 [User]
 Language=ru_RU.UTF-8
-Session=$PLASMA_SESSION
-XSession=$PLASMA_SESSION
+Session=${PLASMA_SESSION}
+XSession=${PLASMA_SESSION}
 SystemAccount=false
 ACCOUNT
   chmod 0644 /var/lib/AccountsService/users/teacher || true

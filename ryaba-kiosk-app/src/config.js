@@ -27,8 +27,6 @@ function getStateDir() {
     return process.env.RYABA_KIOSK_STATE_DIR;
   }
 
-  // Общий state нужен, чтобы настройка, сделанная из teacher или из ryaba-kiosk,
-  // не терялась при смене пользователя.
   const shared = '/var/lib/ryaba-kiosk';
 
   try {
