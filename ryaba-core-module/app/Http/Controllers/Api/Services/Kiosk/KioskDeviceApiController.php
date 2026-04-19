@@ -145,9 +145,11 @@ class KioskDeviceApiController extends Controller
         $profileVersion = optional($profile?->updated_at)->timestamp ?: 0;
         $deviceVersion = optional($device->updated_at)->timestamp ?: 0;
 
+        $configVersion = max($profileVersion, $deviceVersion) ?: 1;
+
         return response()->json([
             'status' => $device->status,
-            'config_version' => max($profileVersion, $deviceVersion, time()),
+            'config_version' => $configVersion,
             'config' => $config,
         ]);
     }

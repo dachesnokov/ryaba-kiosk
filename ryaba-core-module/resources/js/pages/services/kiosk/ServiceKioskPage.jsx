@@ -54,8 +54,7 @@ const HELP_TABS = [
         content: (
             <div className="space-y-4 text-sm leading-6 text-slate-600">
                 <p>Скачайте RPM из Ryaba и установите его на чистую МОС 12.</p>
-                <pre className="overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">cd ~/Загрузки
-sudo rpm -Uvh ryaba-kiosk-shell-0.1.0-x86_64.rpm</pre>
+                <pre className="overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">cd ~/Загрузки && sudo rpm -Uvh ryaba-kiosk-shell-0.1.0-x86_64.rpm</pre>
                 <p>После установки запустите <b>Ryaba Kiosk Shell</b> из меню приложений.</p>
                 <p>При первом запуске укажите:</p>
                 <pre className="overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">Адрес Ryaba Core:

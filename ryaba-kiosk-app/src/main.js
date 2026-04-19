@@ -286,6 +286,24 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  ipcMain.handle('kiosk:back', async () => {
+    if (mainWindow && mainWindow.webContents.canGoBack()) {
+      mainWindow.webContents.goBack();
+      return { ok: true, action: 'back' };
+    }
+
+    reloadConfig();
+
+    if (mainWindow) {
+      const target = getSafeHomeUrl(config);
+      if (target !== 'about:blank') {
+        mainWindow.loadURL(target);
+      }
+    }
+
+    return { ok: true, action: 'home' };
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
