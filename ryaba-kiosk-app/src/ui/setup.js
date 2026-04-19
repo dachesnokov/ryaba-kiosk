@@ -20,5 +20,5 @@ $('save').onclick = async () => {
     return;
   }
 
-  $('result').textContent = 'Настройки сохранены. Киоск подключается к Ryaba Core...';
+  $('result').textContent = 'Настройки сохранены. Киоск перезапускается и получает профиль из Ryaba...';
 };

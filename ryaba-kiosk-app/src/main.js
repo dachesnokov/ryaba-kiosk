@@ -323,16 +323,15 @@ app.whenReady().then(() => {
 
       reloadConfig();
 
-      if (mainWindow) {
-        const target = getSafeHomeUrl(config);
-        if (target === 'about:blank') {
-          mainWindow.loadFile(path.join(__dirname, 'ui', 'offline.html'));
-        } else {
-          mainWindow.loadURL(target);
-        }
-      }
+      setTimeout(() => {
+        try {
+          app.relaunch();
+        } catch (_) {}
 
-      return { ok: true };
+        app.exit(0);
+      }, 300);
+
+      return { ok: true, relaunch: true };
     } catch (error) {
       return { ok: false, error: error.message };
     }

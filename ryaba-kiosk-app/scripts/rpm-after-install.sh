@@ -7,12 +7,10 @@ HELPER_SRC="$APP_DIR/resources/helper/ryaba-kiosk-helper.py"
 KIOSK_USER="ryaba-kiosk"
 KIOSK_PASSWORD="123456"
 
-SHELL_PATH="/bin/bash"
-
 if ! id "$KIOSK_USER" >/dev/null 2>&1; then
-  useradd -m -s "$SHELL_PATH" -c "Ryaba Kiosk" "$KIOSK_USER" || true
+  useradd -m -s /bin/bash -c "Ryaba Kiosk" "$KIOSK_USER" || true
 else
-  usermod -s "$SHELL_PATH" -c "Ryaba Kiosk" "$KIOSK_USER" || true
+  usermod -s /bin/bash -c "Ryaba Kiosk" "$KIOSK_USER" || true
 fi
 
 echo "$KIOSK_USER:$KIOSK_PASSWORD" | chpasswd || true
@@ -26,7 +24,6 @@ done
 install -d -m 0755 /etc/ryaba-kiosk
 install -d -m 0777 /var/lib/ryaba-kiosk
 install -d -m 0755 /opt/ryaba-kiosk
-install -d -m 0777 /var/log
 
 if [ ! -f /etc/ryaba-kiosk/config.json ]; then
   cat > /etc/ryaba-kiosk/config.json <<'JSON'
@@ -78,9 +75,10 @@ export XDG_CURRENT_DESKTOP=RyabaKiosk
 export ELECTRON_DISABLE_SECURITY_WARNINGS=true
 export RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
 
-LOG_FILE="/var/log/ryaba-kiosk-session.log"
+LOG_FILE="/var/lib/ryaba-kiosk/session.log"
 touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-session.log"
 chmod 0666 "$LOG_FILE" 2>/dev/null || true
+
 exec >> "$LOG_FILE" 2>&1
 
 echo
@@ -133,36 +131,40 @@ SystemAccount=false
 ACCOUNT
 chmod 0644 /var/lib/AccountsService/users/$KIOSK_USER
 
-cat > "/home/$KIOSK_USER/.dmrc" <<DMRC
+cat > /home/$KIOSK_USER/.dmrc <<DMRC
 [Desktop]
 Session=ryaba-kiosk
 DMRC
-chown "$KIOSK_USER:$KIOSK_USER" "/home/$KIOSK_USER/.dmrc" || true
+chown "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.dmrc || true
 
-# Не ломаем teacher: возвращаем ему обычную Plasma-сессию, если она есть.
+# Возвращаем обычных пользователей в Plasma, чтобы teacher и другие не ловили kiosk-session.
 PLASMA_SESSION=""
-for candidate in plasma plasma-x11 startplasma-x11; do
-  if [ -f "/usr/share/xsessions/$candidate.desktop" ]; then
-    PLASMA_SESSION="$candidate"
+for file in /usr/share/xsessions/01plasma.desktop /usr/share/xsessions/plasma.desktop /usr/share/xsessions/plasma-x11.desktop /usr/share/xsessions/startplasma-x11.desktop; do
+  if [ -f "$file" ]; then
+    PLASMA_SESSION="$(basename "$file" .desktop)"
     break
   fi
 done
 
-if id teacher >/dev/null 2>&1 && [ -n "$PLASMA_SESSION" ]; then
-  cat > /home/teacher/.dmrc <<DMRC
+if [ -n "$PLASMA_SESSION" ]; then
+  for user_name in teacher; do
+    if id "$user_name" >/dev/null 2>&1; then
+      cat > /home/$user_name/.dmrc <<DMRC
 [Desktop]
 Session=$PLASMA_SESSION
 DMRC
-  chown teacher:teacher /home/teacher/.dmrc || true
+      chown "$user_name:$user_name" /home/$user_name/.dmrc || true
 
-  cat > /var/lib/AccountsService/users/teacher <<ACCOUNT
+      cat > /var/lib/AccountsService/users/$user_name <<ACCOUNT
 [User]
 Language=ru_RU.UTF-8
 Session=$PLASMA_SESSION
 XSession=$PLASMA_SESSION
 SystemAccount=false
 ACCOUNT
-  chmod 0644 /var/lib/AccountsService/users/teacher || true
+      chmod 0644 /var/lib/AccountsService/users/$user_name || true
+    fi
+  done
 fi
 
 mkdir -p /etc/sddm.conf.d
