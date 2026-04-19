@@ -5,7 +5,6 @@ import pwd
 import grp
 import shlex
 import socket
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -75,60 +74,11 @@ def wifi_connect(payload):
     return run(args, timeout=30)
 
 
-
-def has_cmd(name):
-    return shutil.which(name) is not None
-
-
 def audio_status(_payload):
-    backends = []
-
-    if has_cmd("pactl"):
-        volume = run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"])
-        mute = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"])
-        source = run(["pactl", "get-source-mute", "@DEFAULT_SOURCE@"])
-        return {
-            "ok": volume["ok"] or mute["ok"] or source["ok"],
-            "backend": "pactl",
-            "data": {
-                "volume": volume,
-                "mute": mute,
-                "microphone": source,
-            },
-        }
-    backends.append("pactl: not found")
-
-    if has_cmd("wpctl"):
-        volume = run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
-        mic = run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
-        return {
-            "ok": volume["ok"] or mic["ok"],
-            "backend": "wpctl",
-            "data": {
-                "volume": volume,
-                "microphone": mic,
-            },
-        }
-    backends.append("wpctl: not found")
-
-    if has_cmd("amixer"):
-        volume = run(["amixer", "sget", "Master"])
-        mic = run(["amixer", "sget", "Capture"])
-        return {
-            "ok": volume["ok"] or mic["ok"],
-            "backend": "amixer",
-            "data": {
-                "volume": volume,
-                "microphone": mic,
-            },
-        }
-    backends.append("amixer: not found")
-
-    return {
-        "ok": False,
-        "error": "Не найден backend управления звуком",
-        "checked": backends,
-    }
+    volume = run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"])
+    mute = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"])
+    source = run(["pactl", "get-source-mute", "@DEFAULT_SOURCE@"])
+    return {"ok": volume["ok"] or mute["ok"], "data": {"volume": volume, "mute": mute, "microphone": source}}
 
 
 def audio_set_volume(payload):
@@ -136,67 +86,13 @@ def audio_set_volume(payload):
         volume = int(payload.get("volume", 50))
     except Exception:
         volume = 50
-
     volume = max(0, min(100, volume))
-
-    if has_cmd("pactl"):
-        return {
-            "ok": True,
-            "backend": "pactl",
-            "result": run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{volume}%"]),
-        }
-
-    if has_cmd("wpctl"):
-        return {
-            "ok": True,
-            "backend": "wpctl",
-            "result": run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{volume}%"]),
-        }
-
-    if has_cmd("amixer"):
-        return {
-            "ok": True,
-            "backend": "amixer",
-            "result": run(["amixer", "sset", "Master", f"{volume}%"]),
-        }
-
-    return {
-        "ok": False,
-        "error": "Не найден pactl/wpctl/amixer для установки громкости",
-    }
+    return run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{volume}%"])
 
 
 def audio_mute(payload):
-    muted = bool(payload.get("muted"))
-
-    if has_cmd("pactl"):
-        value = "1" if muted else "0"
-        return {
-            "ok": True,
-            "backend": "pactl",
-            "result": run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", value]),
-        }
-
-    if has_cmd("wpctl"):
-        value = "1" if muted else "0"
-        return {
-            "ok": True,
-            "backend": "wpctl",
-            "result": run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", value]),
-        }
-
-    if has_cmd("amixer"):
-        value = "mute" if muted else "unmute"
-        return {
-            "ok": True,
-            "backend": "amixer",
-            "result": run(["amixer", "sset", "Master", value]),
-        }
-
-    return {
-        "ok": False,
-        "error": "Не найден pactl/wpctl/amixer для mute",
-    }
+    value = "1" if bool(payload.get("muted")) else "0"
+    return run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", value])
 
 
 ACTIONS = {
