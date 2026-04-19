@@ -1,6 +1,155 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
+const KIOSK_HELP_TABS = [
+    {
+        id: 'profile',
+        title: 'Создание профиля и ключа',
+        body: (
+            <div className="space-y-4 text-sm leading-6 text-slate-600">
+                <p>
+                    Профиль определяет, какой сайт открывает киоск, какие домены разрешены,
+                    можно ли использовать камеру, микрофон, загрузки и локальную админ-панель.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                    <li>В блоке <b>Быстрый профиль</b> укажите название профиля.</li>
+                    <li>Укажите домашнюю WEB-страницу, например <code className="rounded bg-slate-100 px-1.5 py-0.5">https://ra.spo-kp.ru</code>.</li>
+                    <li>Нажмите <b>Создать профиль</b>.</li>
+                    <li>В блоке <b>Токен регистрации</b> выберите созданный профиль.</li>
+                    <li>Нажмите <b>Создать токен</b> и сохраните выданный ключ. Повторно он в открытом виде не показывается.</li>
+                </ol>
+                <div className="rounded-2xl bg-amber-50 p-4 text-amber-900">
+                    <b>Важно:</b> RPM универсальный. Профиль не зашивается в RPM. Киоск привязывается к профилю через токен регистрации.
+                </div>
+            </div>
+        ),
+    },
+    {
+        id: 'manage',
+        title: 'Управление профилями и устройствами в UI Ryaba',
+        body: (
+            <div className="space-y-4 text-sm leading-6 text-slate-600">
+                <p>
+                    После первого запуска киоск регистрируется в Ryaba и появляется в списке устройств.
+                    Устройство можно принять, переименовать, назначить профиль и задать индивидуальную WEB-страницу.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                    <li>Выберите киоск в таблице <b>Устройства</b>.</li>
+                    <li>В правом блоке <b>Конфиг устройства</b> задайте имя, профиль и WEB-страницу.</li>
+                    <li>При необходимости укажите разрешенные домены и пути.</li>
+                    <li>Нажмите <b>Сохранить и применить</b>.</li>
+                    <li>Киоск получит новый конфиг через heartbeat и перейдет на новый сайт без переустановки shell.</li>
+                </ol>
+                <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
+                    <b>Команда «Применить»</b> отправляет киоску команду перейти на домашнюю страницу.
+                    Даже без команды новый конфиг подтягивается автоматически примерно за 30 секунд.
+                </div>
+                <p>
+                    Удаление киоска удаляет регистрацию в Ryaba. Приложение на МОС 12 при этом физически не удаляется.
+                    При следующей чистой установке или повторной регистрации устройство появится заново.
+                </p>
+            </div>
+        ),
+    },
+    {
+        id: 'install',
+        title: 'Установка на МОС 12',
+        body: (
+            <div className="space-y-4 text-sm leading-6 text-slate-600">
+                <p>
+                    Для чистой установки скачайте RPM из этого раздела и установите его на МОС 12.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                    <li>Нажмите <b>Скачать RPM</b>.</li>
+                    <li>Передайте файл на МОС 12, например в папку <b>Загрузки</b>.</li>
+                    <li>Выполните установку:</li>
+                </ol>
+                <pre className="overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">cd ~/Загрузки
+sudo rpm -Uvh ryaba-kiosk-shell-0.1.0-x86_64.rpm</pre>
+                <p>После установки запустите <b>Ryaba Kiosk Shell</b> из меню приложений.</p>
+                <p>При первом запуске укажите:</p>
+                <pre className="overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">Адрес Ryaba Core:
+https://ra.spo-kp.ru
+
+Ключ регистрации:
+токен, созданный в Ryaba под нужный профиль
+
+Стартовая страница:
+https://ra.spo-kp.ru</pre>
+                <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-900">
+                    После регистрации киоск появится в таблице устройств. Если статус <b>pending</b>,
+                    нажмите <b>Принять</b>.
+                </div>
+                <p>
+                    Локальная админ-панель киоска открывается пятью кликами в левый верхний угол.
+                    PIN по умолчанию: <b>123456</b>.
+                </p>
+            </div>
+        ),
+    },
+];
+
+function KioskHelpModal({ activeTab, setActiveTab, onClose }) {
+    const tab = KIOSK_HELP_TABS.find((item) => item.id === activeTab) || KIOSK_HELP_TABS[0];
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-6 backdrop-blur-sm">
+            <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-start justify-between border-b border-slate-200 p-6">
+                    <div>
+                        <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Ryaba Kiosk</div>
+                        <h2 className="mt-1 text-2xl font-bold text-slate-900">Инструкция</h2>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                    >
+                        Закрыть
+                    </button>
+                </div>
+
+                <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)]">
+                    <div className="border-r border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-col gap-2">
+                            {KIOSK_HELP_TABS.map((item, index) => (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(item.id)}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold ${
+                                        item.id === activeTab
+                                            ? 'bg-slate-900 text-white shadow-sm'
+                                            : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <span className="mr-2 opacity-70">{index + 1}.</span>
+                                    {item.title}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="min-h-0 overflow-auto p-6">
+                        <h3 className="mb-4 text-xl font-bold text-slate-900">{tab.title}</h3>
+                        {tab.body}
+                    </div>
+                </div>
+            </div>
+
+            {helpOpen ? (
+                <KioskHelpModal
+                    activeTab={helpTab}
+                    setActiveTab={setHelpTab}
+                    onClose={() => setHelpOpen(false)}
+                />
+            ) : null}
+        </div>
+    );
+}
+
+
+
 const defaultProfile = {
     name: 'Основной профиль киоска',
     description: '',
@@ -70,6 +219,8 @@ export default function ServiceKioskPage({ user }) {
     const [plainToken, setPlainToken] = useState('');
     const [loading, setLoading] = useState(true);
     const [savingDevice, setSavingDevice] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
+    const [helpTab, setHelpTab] = useState('profile');
     const [deviceForm, setDeviceForm] = useState({
         name: '',
         profile_id: '',
@@ -257,7 +408,7 @@ export default function ServiceKioskPage({ user }) {
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
-            <div className="mx-auto flex max-w-7xl flex-col gap-5">
+            <div className="flex w-full max-w-none flex-col gap-5">
                 <div className="flex items-start justify-between">
                     <div>
                         <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Сервисы</div>
@@ -267,6 +418,14 @@ export default function ServiceKioskPage({ user }) {
                         </p>
                     </div>
                     <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setHelpOpen(true)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-base font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                            title="Инструкция"
+                        >
+                            ?
+                        </button>
                         <button onClick={downloadRpm} className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
                             Скачать RPM
                         </button>
