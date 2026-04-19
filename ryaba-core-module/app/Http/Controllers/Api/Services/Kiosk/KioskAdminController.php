@@ -17,6 +17,11 @@ class KioskAdminController extends Controller
         return hash('sha256', $token);
     }
 
+    private function configVersionNow(): int
+    {
+        return (int) round(microtime(true) * 1000);
+    }
+
     public function dashboard()
     {
         return response()->json([
@@ -87,7 +92,7 @@ class KioskAdminController extends Controller
         if (array_key_exists('config_override', $data)) {
             $meta = $device->meta ?: [];
             $meta['config_override'] = $data['config_override'] ?: [];
-            $meta['config_updated_at'] = now()->timestamp;
+            $meta['config_updated_at'] = $this->configVersionNow();
             $device->meta = $meta;
             $shouldBumpConfigVersion = true;
             unset($data['config_override']);
@@ -95,7 +100,7 @@ class KioskAdminController extends Controller
 
         if (array_key_exists('profile_id', $data) && (string) ($data['profile_id'] ?? '') !== (string) ($device->profile_id ?? '')) {
             $meta = $device->meta ?: [];
-            $meta['config_updated_at'] = now()->timestamp;
+            $meta['config_updated_at'] = $this->configVersionNow();
             $device->meta = $meta;
             $shouldBumpConfigVersion = true;
         }
@@ -167,6 +172,18 @@ class KioskAdminController extends Controller
             $profile->created_by = optional($request->user())->id;
         }
         $profile->save();
+
+        $version = $this->configVersionNow();
+
+        KioskDevice::query()
+            ->where('profile_id', $profile->id)
+            ->get()
+            ->each(function (KioskDevice $device) use ($version) {
+                $meta = $device->meta ?: [];
+                $meta['config_updated_at'] = $version;
+                $device->meta = $meta;
+                $device->save();
+            });
 
         return response()->json(['ok' => true, 'profile' => $profile]);
     }

@@ -101,10 +101,21 @@ class KioskDeviceApiController extends Controller
 
         $data = $request->validate([
             'device' => ['nullable', 'array'],
-            'current_url' => ['nullable', 'string', 'max:2048'],
+            'current_url' => ['nullable', 'string'],
         ]);
 
         $payload = $data['device'] ?? [];
+
+        $currentUrl = $data['current_url'] ?? null;
+        if ($currentUrl !== null) {
+            $currentUrl = (string) $currentUrl;
+
+            if (! Str::startsWith($currentUrl, ['http://', 'https://'])) {
+                $currentUrl = null;
+            } elseif (mb_strlen($currentUrl) > 2048) {
+                $currentUrl = mb_substr($currentUrl, 0, 2048);
+            }
+        }
 
         $device->fill([
             'last_seen_at' => now(),
@@ -114,7 +125,7 @@ class KioskDeviceApiController extends Controller
             'os_version' => $payload['release'] ?? $device->os_version,
             'app_version' => $payload['appVersion'] ?? $device->app_version,
             'mac_addresses' => $payload['macAddresses'] ?? $device->mac_addresses,
-            'last_payload' => array_merge($payload, ['current_url' => $data['current_url'] ?? null]),
+            'last_payload' => array_merge($payload, ['current_url' => $currentUrl]),
         ]);
 
         if ($device->status === 'pending') {
@@ -138,9 +149,6 @@ class KioskDeviceApiController extends Controller
             $config = array_replace_recursive($config, $cleanOverride);
         }
 
-        if ($config) {
-            $config['coreUrl'] = config('app.url');
-        }
         $profileVersion = optional($profile?->updated_at)->timestamp ?: 0;
         $deviceConfigVersion = (int) data_get($device->meta ?: [], 'config_updated_at', 0);
         $configVersion = max($profileVersion, $deviceConfigVersion) ?: 1;

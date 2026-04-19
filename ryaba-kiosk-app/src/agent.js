@@ -68,6 +68,15 @@ function devicePayload() {
   };
 }
 
+function sanitizeCurrentUrl(value) {
+  const url = String(value || '').trim();
+
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  return url.length > 2048 ? url.slice(0, 2048) : url;
+}
+
 async function requestJson(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -140,7 +149,7 @@ class RyabaAgent {
       headers: this.authHeaders(),
       body: JSON.stringify({
         device: devicePayload(),
-        current_url: global.__RYABA_CURRENT_URL__ || null
+        current_url: sanitizeCurrentUrl(global.__RYABA_CURRENT_URL__)
       })
     });
 

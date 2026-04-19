@@ -124,7 +124,15 @@ while true; do
     continue
   fi
 
-  "$APP" --disable-gpu --no-sandbox --ozone-platform=x11
+  rm -f /home/ryaba-kiosk/.config/ryaba-kiosk-shell/SingletonLock 2>/dev/null || true
+  rm -f /home/ryaba-kiosk/.config/ryaba-kiosk-shell/SingletonSocket 2>/dev/null || true
+  rm -f /home/ryaba-kiosk/.config/ryaba-kiosk-shell/SingletonCookie 2>/dev/null || true
+  rm -f /home/ryaba-kiosk/.config/ryaba-kiosk-shell/File\ System/Origins/LOCK 2>/dev/null || true
+  rm -rf /home/ryaba-kiosk/.config/ryaba-kiosk-shell/GPUCache 2>/dev/null || true
+  rm -rf /home/ryaba-kiosk/.config/ryaba-kiosk-shell/Cache 2>/dev/null || true
+  rm -rf /home/ryaba-kiosk/.config/ryaba-kiosk-shell/Code\ Cache 2>/dev/null || true
+
+  "$APP" --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-features=UseOzonePlatform,Vulkan,VizDisplayCompositor --no-sandbox --ozone-platform=x11
 
   CODE="$?"
   echo "Ryaba Kiosk exited with code $CODE at $(date -Is), restarting in 2s"
