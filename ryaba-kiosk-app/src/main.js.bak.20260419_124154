@@ -67,23 +67,10 @@ function createMainWindow() {
 
   mainWindow.webContents.session.webRequest.onBeforeRequest((details, callback) => {
     const resourceType = details.resourceType;
-
-    // Внутренние страницы самого приложения: админка, первый запуск, offline fallback.
-    // Их нельзя прогонять через allowlist сайтов, иначе Electron получает ERR_BLOCKED_BY_CLIENT.
-    let protocol = '';
-    try {
-      protocol = new URL(details.url).protocol;
-    } catch (_) {}
-
-    if (['file:', 'data:', 'about:'].includes(protocol)) {
-      return callback({});
-    }
-
     if (['mainFrame', 'subFrame'].includes(resourceType) && !isAllowedUrl(details.url, config)) {
       sendBlocked(`webRequest:${resourceType}`, details.url);
       return callback({ cancel: true });
     }
-
     callback({});
   });
 
