@@ -7,6 +7,8 @@ HELPER_SRC="$APP_DIR/resources/helper/ryaba-kiosk-helper.py"
 KIOSK_USER="ryaba-kiosk"
 KIOSK_PASSWORD="123456"
 
+echo "===== Ryaba Kiosk postinstall ====="
+
 if ! id "$KIOSK_USER" >/dev/null 2>&1; then
   useradd -m -s /bin/bash -c "Ryaba Kiosk" "$KIOSK_USER" || true
 else
@@ -25,8 +27,7 @@ install -d -m 0755 /etc/ryaba-kiosk
 install -d -m 0777 /var/lib/ryaba-kiosk
 install -d -m 0755 /opt/ryaba-kiosk
 
-if [ ! -f /etc/ryaba-kiosk/config.json ]; then
-  cat > /etc/ryaba-kiosk/config.json <<'JSON'
+cat > /etc/ryaba-kiosk/config.json <<'JSON'
 {
   "coreUrl": "",
   "enrollmentToken": "",
@@ -42,8 +43,7 @@ if [ ! -f /etc/ryaba-kiosk/config.json ]; then
   "commandsSeconds": 15
 }
 JSON
-  chmod 0644 /etc/ryaba-kiosk/config.json
-fi
+chmod 0644 /etc/ryaba-kiosk/config.json
 
 if [ -f "$HELPER_SRC" ]; then
   install -m 0755 "$HELPER_SRC" /opt/ryaba-kiosk/ryaba-kiosk-helper.py
@@ -67,12 +67,9 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-cat > /usr/local/bin/ryaba-kiosk-autostart <<'SH'
+cat > /usr/local/bin/ryaba-kiosk-xsession <<'SH'
 #!/usr/bin/env bash
-
-if [ "$(id -un)" != "ryaba-kiosk" ]; then
-  exit 0
-fi
+set -u
 
 mkdir -p /var/lib/ryaba-kiosk
 chmod 0777 /var/lib/ryaba-kiosk 2>/dev/null || true
@@ -84,7 +81,7 @@ chmod 0666 "$LOG_FILE" 2>/dev/null || true
 exec >> "$LOG_FILE" 2>&1
 
 echo
-echo "===== Ryaba Kiosk autostart: $(date -Is) ====="
+echo "===== Ryaba Kiosk pure X session: $(date -Is) ====="
 id
 env | sort
 
@@ -92,41 +89,118 @@ export RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
 export ELECTRON_DISABLE_SECURITY_WARNINGS=true
 export ELECTRON_ENABLE_LOGGING=1
 export ELECTRON_ENABLE_STACK_DUMPING=1
+export NO_AT_BRIDGE=1
+
+xset -dpms 2>/dev/null || true
+xset s off 2>/dev/null || true
+xset s noblank 2>/dev/null || true
 
 APP="/opt/Ryaba Kiosk Shell/ryaba-kiosk-shell"
 
-sleep 5
+while true; do
+  echo
+  echo "Starting: $APP at $(date -Is)"
 
-echo "Starting: $APP"
+  if [ ! -x "$APP" ]; then
+    echo "ERROR: app not found: $APP"
+    sleep 5
+    continue
+  fi
 
-if [ ! -x "$APP" ]; then
-  echo "ERROR: app not found: $APP"
-  exit 1
-fi
+  "$APP" --disable-gpu --no-sandbox --ozone-platform=x11
 
-exec "$APP" --disable-gpu --no-sandbox --ozone-platform=x11
+  CODE="$?"
+  echo "Ryaba Kiosk exited with code $CODE at $(date -Is), restarting in 2s"
+  sleep 2
+done
 SH
 
-chmod 0755 /usr/local/bin/ryaba-kiosk-autostart
+chmod 0755 /usr/local/bin/ryaba-kiosk-xsession
 
+cat > /usr/local/bin/ryaba-kiosk-start-xorg <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p /var/lib/ryaba-kiosk
+chmod 0777 /var/lib/ryaba-kiosk 2>/dev/null || true
+
+LOG_FILE="/var/lib/ryaba-kiosk/xorg-start.log"
+touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-xorg-start.log"
+chmod 0666 "$LOG_FILE" 2>/dev/null || true
+
+exec >> "$LOG_FILE" 2>&1
+
+echo
+echo "===== Ryaba Kiosk Xorg launcher: $(date -Is) ====="
+id
+env | sort
+
+XINIT_BIN="$(command -v xinit || true)"
+if [ -z "$XINIT_BIN" ]; then
+  echo "ERROR: xinit not found. Install xinit/xorg-x11-xinit package."
+  exit 127
+fi
+
+XORG_BIN="$(command -v Xorg || true)"
+if [ -z "$XORG_BIN" ] && [ -x /usr/libexec/Xorg ]; then
+  XORG_BIN="/usr/libexec/Xorg"
+fi
+
+if [ -z "$XORG_BIN" ]; then
+  echo "ERROR: Xorg not found."
+  exit 127
+fi
+
+echo "XINIT_BIN=$XINIT_BIN"
+echo "XORG_BIN=$XORG_BIN"
+
+exec "$XINIT_BIN" /usr/local/bin/ryaba-kiosk-xsession -- "$XORG_BIN" :1 vt7 -nolisten tcp -noreset
+SH
+
+chmod 0755 /usr/local/bin/ryaba-kiosk-start-xorg
+
+cat > /etc/systemd/system/ryaba-kiosk-shell.service <<'UNIT'
+[Unit]
+Description=Ryaba Kiosk dedicated pure Xorg shell
+Documentation=https://ra.spo-kp.ru
+After=systemd-user-sessions.service NetworkManager.service ryaba-kiosk-helper.service
+Wants=NetworkManager.service ryaba-kiosk-helper.service
+
+# Киоск-режим должен быть отдельным режимом, без SDDM/KDE.
+Conflicts=display-manager.service sddm.service
+
+[Service]
+Type=simple
+User=ryaba-kiosk
+Group=ryaba-kiosk
+PAMName=login
+WorkingDirectory=/home/ryaba-kiosk
+Environment=HOME=/home/ryaba-kiosk
+Environment=USER=ryaba-kiosk
+Environment=LOGNAME=ryaba-kiosk
+Environment=RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
+
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+ExecStart=/usr/local/bin/ryaba-kiosk-start-xorg
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# Убираем все старые попытки автозапуска через KDE/SDDM.
 rm -f /etc/xdg/autostart/ryaba-kiosk-shell.desktop
 rm -f /usr/share/xsessions/ryaba-kiosk.desktop
 rm -f /usr/local/bin/ryaba-kiosk-session
-
-install -d -m 0755 /home/$KIOSK_USER/.config/autostart
-
-cat > /home/$KIOSK_USER/.config/autostart/ryaba-kiosk-shell.desktop <<AUTOSTART
-[Desktop Entry]
-Type=Application
-Name=Ryaba Kiosk Shell
-Comment=Start Ryaba Kiosk Shell only for ryaba-kiosk
-Exec=/usr/local/bin/ryaba-kiosk-autostart
-Terminal=false
-X-KDE-autostart-after=panel
-X-KDE-StartupNotify=false
-AUTOSTART
-
-chown -R "$KIOSK_USER:$KIOSK_USER" /home/$KIOSK_USER/.config || true
+rm -f /usr/local/bin/ryaba-kiosk-autostart
+rm -f /home/ryaba-kiosk/.config/autostart/ryaba-kiosk-shell.desktop 2>/dev/null || true
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
@@ -135,5 +209,26 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl enable --now ryaba-kiosk-helper.service || true
   fi
 fi
+
+cat > /var/lib/ryaba-kiosk/README-MODE.txt <<'TXT'
+Ryaba Kiosk установлен.
+
+Обычный режим:
+  sudo systemctl enable --now sddm
+
+Киоск-режим без KDE/Plasma:
+  sudo systemctl disable --now sddm
+  sudo systemctl enable --now ryaba-kiosk-shell
+
+Вернуться из киоск-режима:
+  sudo systemctl disable --now ryaba-kiosk-shell
+  sudo systemctl enable --now sddm
+
+Логи:
+  sudo cat /var/lib/ryaba-kiosk/shell.log
+  sudo cat /var/lib/ryaba-kiosk/xorg-start.log
+  sudo journalctl -u ryaba-kiosk-shell -n 200 --no-pager
+TXT
+chmod 0666 /var/lib/ryaba-kiosk/README-MODE.txt || true
 
 exit 0
