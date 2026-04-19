@@ -199,7 +199,96 @@ def audio_mute(payload):
     }
 
 
+
+def systemctl_bin():
+    found = shutil.which("systemctl")
+    if found:
+        return found
+
+    for candidate in ["/bin/systemctl", "/usr/bin/systemctl"]:
+        if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+
+    return "systemctl"
+
+
+def system_status(_payload):
+    sctl = systemctl_bin()
+
+    def state(unit):
+        return {
+            "active": run([sctl, "is-active", unit], timeout=5),
+            "enabled": run([sctl, "is-enabled", unit], timeout=5),
+        }
+
+    return {
+        "ok": True,
+        "data": {
+            "sddm": state("sddm.service"),
+            "displayManager": state("display-manager.service"),
+            "kiosk": state("ryaba-kiosk-shell.service"),
+        },
+    }
+
+
+def schedule_mode_switch(mode):
+    sctl = systemctl_bin()
+    script = Path(f"/tmp/ryaba-kiosk-switch-{mode}-{os.getpid()}.sh")
+
+    if mode == "kiosk":
+        body = f"""#!/usr/bin/env bash
+set -u
+sleep 1
+{sctl} disable --now sddm.service >/tmp/ryaba-kiosk-switch.log 2>&1 || true
+{sctl} disable --now display-manager.service >>/tmp/ryaba-kiosk-switch.log 2>&1 || true
+{sctl} daemon-reload >>/tmp/ryaba-kiosk-switch.log 2>&1 || true
+{sctl} enable --now ryaba-kiosk-shell.service >>/tmp/ryaba-kiosk-switch.log 2>&1 || true
+"""
+        message = "Запланировано включение чистого режима киоска: SDDM будет выключен, ryaba-kiosk-shell будет включен."
+    elif mode == "desktop":
+        body = f"""#!/usr/bin/env bash
+set -u
+sleep 1
+{sctl} disable --now ryaba-kiosk-shell.service >/tmp/ryaba-kiosk-switch.log 2>&1 || true
+{sctl} daemon-reload >>/tmp/ryaba-kiosk-switch.log 2>&1 || true
+{sctl} enable --now sddm.service >>/tmp/ryaba-kiosk-switch.log 2>&1 || true
+"""
+        message = "Запланирован возврат рабочего стола: ryaba-kiosk-shell будет выключен, SDDM будет включен."
+    else:
+        return {"ok": False, "error": f"unknown mode: {mode}"}
+
+    script.write_text(body, encoding="utf-8")
+    script.chmod(0o755)
+
+    subprocess.Popen(
+        ["/bin/bash", str(script)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        close_fds=True,
+    )
+
+    return {
+        "ok": True,
+        "scheduled": True,
+        "mode": mode,
+        "message": message,
+        "log": "/tmp/ryaba-kiosk-switch.log",
+    }
+
+
+def system_enable_kiosk_mode(_payload):
+    return schedule_mode_switch("kiosk")
+
+
+def system_enable_desktop_mode(_payload):
+    return schedule_mode_switch("desktop")
+
+
 ACTIONS = {
+    "system.status": system_status,
+    "system.enableKioskMode": system_enable_kiosk_mode,
+    "system.enableDesktopMode": system_enable_desktop_mode,
     "network.status": network_status,
     "wifi.scan": wifi_scan,
     "wifi.connect": wifi_connect,

@@ -215,6 +215,43 @@ class KioskAdminController extends Controller
         return response()->json(['ok' => true]);
     }
 
+
+    public function enrollmentTokens(Request $request)
+    {
+        $query = KioskEnrollmentToken::query()
+            ->with('profile:id,name')
+            ->latest();
+
+        if ($request->filled('profile_id')) {
+            $query->where('profile_id', $request->integer('profile_id'));
+        }
+
+        $tokens = $query
+            ->limit(100)
+            ->get()
+            ->map(function (KioskEnrollmentToken $token) {
+                $maxUses = $token->max_uses;
+                $usedCount = (int) ($token->used_count ?? 0);
+
+                return [
+                    'id' => $token->id,
+                    'name' => $token->name,
+                    'profile_id' => $token->profile_id,
+                    'profile' => $token->profile,
+                    'is_active' => (bool) $token->is_active,
+                    'expires_at' => optional($token->expires_at)->toISOString(),
+                    'max_uses' => $maxUses,
+                    'used_count' => $usedCount,
+                    'remaining_uses' => $maxUses === null ? null : max(0, (int) $maxUses - $usedCount),
+                    'is_exhausted' => $maxUses !== null && $usedCount >= (int) $maxUses,
+                    'can_be_used' => $token->canBeUsed(),
+                    'created_at' => optional($token->created_at)->toISOString(),
+                ];
+            });
+
+        return response()->json(['data' => $tokens]);
+    }
+
     public function createEnrollmentToken(Request $request)
     {
         $data = $request->validate([

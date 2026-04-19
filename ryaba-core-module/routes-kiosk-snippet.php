@@ -25,5 +25,6 @@ Route::middleware(['auth:sanctum'])->prefix('admin/services/kiosks')->group(func
     Route::patch('/profiles/{profile}', [KioskAdminController::class, 'saveProfile']);
     Route::delete('/profiles/{profile}', [KioskAdminController::class, 'deleteProfile']);
 
+    Route::get('/enrollment-tokens', [KioskAdminController::class, 'enrollmentTokens']);
     Route::post('/enrollment-tokens', [KioskAdminController::class, 'createEnrollmentToken']);
 });

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
+const DEFAULT_TOKEN_MAX_USES = 1;
+
 const DEFAULT_PROFILE_FORM = {
     name: 'Основной профиль киоска',
     home_url: 'https://ra.spo-kp.ru',
@@ -22,6 +24,7 @@ const HELP_TABS = [
                     <li>В левой колонке заполните название профиля и домашний сайт.</li>
                     <li>Нажмите <b>Создать профиль и токен</b>.</li>
                     <li>Ryaba создаст профиль и сразу выдаст ключ регистрации под этот профиль.</li>
+                    <li>Укажите количество использований токена: 1 для боевого киоска, 10/100 для тестовых установок.</li>
                     <li>Сохраните ключ. Повторно он в открытом виде не показывается.</li>
                 </ol>
                 <div className="rounded-2xl bg-amber-50 p-4 text-amber-900">
@@ -189,14 +192,22 @@ function buildProfilePayload(form) {
     };
 }
 
+
+function normalizeTokenMaxUses(value) {
+    const parsed = parseInt(String(value ?? '1'), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export default function ServiceKioskPage() {
     const [dashboard, setDashboard] = useState(null);
     const [devices, setDevices] = useState([]);
     const [profiles, setProfiles] = useState([]);
+    const [tokens, setTokens] = useState([]);
     const [selectedProfileId, setSelectedProfileId] = useState('all');
     const [selectedDeviceId, setSelectedDeviceId] = useState(null);
     const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE_FORM);
     const [plainToken, setPlainToken] = useState('');
+    const [tokenMaxUses, setTokenMaxUses] = useState(DEFAULT_TOKEN_MAX_USES);
     const [loading, setLoading] = useState(true);
     const [savingDevice, setSavingDevice] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
@@ -229,6 +240,12 @@ export default function ServiceKioskPage() {
         [devices, selectedDeviceId]
     );
 
+    const selectedProfileTokens = useMemo(() => {
+        if (selectedProfileId === 'all') return tokens;
+        if (selectedProfileId === 'none') return tokens.filter((token) => !token.profile_id);
+        return tokens.filter((token) => Number(token.profile_id) === Number(selectedProfileId));
+    }, [tokens, selectedProfileId]);
+
     const filteredDevices = useMemo(() => {
         if (selectedProfileId === 'all') return devices;
         if (selectedProfileId === 'none') return devices.filter((device) => !device.profile_id);
@@ -244,18 +261,21 @@ export default function ServiceKioskPage() {
     async function load() {
         setLoading(true);
 
-        const [dash, devs, profs] = await Promise.all([
+        const [dash, devs, profs, toks] = await Promise.all([
             axios.get('/api/admin/services/kiosks/dashboard'),
             axios.get('/api/admin/services/kiosks/devices'),
             axios.get('/api/admin/services/kiosks/profiles'),
+            axios.get('/api/admin/services/kiosks/enrollment-tokens'),
         ]);
 
         const rows = devs.data.data || [];
         const profileRows = profs.data.data || [];
+        const tokenRows = toks.data.data || [];
 
         setDashboard(dash.data);
         setDevices(rows);
         setProfiles(profileRows);
+        setTokens(tokenRows);
 
         if (!selectedDeviceId && rows.length) {
             setSelectedDeviceId(rows[0].id);
@@ -307,10 +327,11 @@ export default function ServiceKioskPage() {
         const { data } = await axios.post('/api/admin/services/kiosks/enrollment-tokens', {
             name: `Регистрация: ${profile.name}`,
             profile_id: profile.id,
-            max_uses: 100,
+            max_uses: normalizeTokenMaxUses(tokenMaxUses),
         });
 
         setPlainToken(data.plain_token);
+        await load();
     }
 
     async function createTokenForSelectedProfile() {
@@ -322,10 +343,11 @@ export default function ServiceKioskPage() {
         const { data } = await axios.post('/api/admin/services/kiosks/enrollment-tokens', {
             name: `Регистрация: ${selectedProfile.name}`,
             profile_id: selectedProfile.id,
-            max_uses: 100,
+            max_uses: normalizeTokenMaxUses(tokenMaxUses),
         });
 
         setPlainToken(data.plain_token);
+        await load();
     }
 
     async function downloadRpm() {
@@ -356,9 +378,29 @@ export default function ServiceKioskPage() {
         await load();
     }
 
-    async function command(device, type) {
-        await axios.post(`/api/admin/services/kiosks/devices/${device.id}/command`, { type, payload: {} });
+    async function command(device, type, payload = {}) {
+        await axios.post(`/api/admin/services/kiosks/devices/${device.id}/command`, { type, payload });
         await load();
+    }
+
+    async function switchShellMode(mode) {
+        if (!selectedDevice) return;
+
+        const label = selectedDevice.name || selectedDevice.hostname || `Киоск #${selectedDevice.id}`;
+        const isKiosk = mode === 'kiosk';
+
+        const text = isKiosk
+            ? `Включить чистый режим киоска на устройстве "${label}"?\n\nSDDM/рабочий стол будет отключен, ryaba-kiosk-shell будет запущен как отдельный Xorg-сервис.`
+            : `Вернуть рабочий стол на устройстве "${label}"?\n\nryaba-kiosk-shell будет отключен, SDDM будет включен.`;
+
+        if (!window.confirm(text)) return;
+
+        await command(selectedDevice, 'helper', {
+            action: isKiosk ? 'system.enableKioskMode' : 'system.enableDesktopMode',
+            payload: {},
+        });
+
+        alert('Команда отправлена на киоск. Устройство применит режим при ближайшем опросе команд.');
     }
 
     async function saveDeviceConfig() {
@@ -592,6 +634,21 @@ export default function ServiceKioskPage() {
                                     />
                                     Профиль по умолчанию
                                 </label>
+                                <label className="text-sm font-semibold text-slate-600">
+                                    Количество использований токена
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="1000"
+                                        value={tokenMaxUses}
+                                        onChange={(e) => setTokenMaxUses(e.target.value)}
+                                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                                        placeholder="1"
+                                    />
+                                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                                        Сколько раз этот токен можно использовать. Для боевого киоска — 1, для тестов — 10/100.
+                                    </span>
+                                </label>
                                 <button
                                     type="button"
                                     onClick={createProfileAndToken}
@@ -611,6 +668,18 @@ export default function ServiceKioskPage() {
 
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                             <h2 className="text-xl font-bold">Токен выбранного профиля</h2>
+                            <label className="mt-4 block text-sm font-semibold text-slate-600">
+                                Количество использований для нового токена
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="1000"
+                                    value={tokenMaxUses}
+                                    onChange={(e) => setTokenMaxUses(e.target.value)}
+                                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                                    placeholder="1"
+                                />
+                            </label>
                             <button
                                 type="button"
                                 onClick={createTokenForSelectedProfile}
@@ -625,6 +694,51 @@ export default function ServiceKioskPage() {
                                     <code className="mt-2 block break-all">{plainToken}</code>
                                 </div>
                             ) : null}
+
+                            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <div className="mb-2 text-sm font-bold text-slate-800">Использование токенов</div>
+                                <div className="space-y-2">
+                                    {selectedProfileTokens.slice(0, 8).map((token) => {
+                                        const maxUses = token.max_uses ?? '∞';
+                                        const used = token.used_count ?? 0;
+                                        const left = token.remaining_uses ?? '∞';
+                                        return (
+                                            <div key={token.id} className="rounded-xl bg-white p-3 text-xs ring-1 ring-slate-200">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <div className="truncate font-semibold text-slate-800">{token.name}</div>
+                                                        <div className="mt-1 text-slate-500">
+                                                            {token.profile?.name || 'Без профиля'}
+                                                        </div>
+                                                    </div>
+                                                    <Badge tone={token.can_be_used ? 'green' : 'red'}>
+                                                        {token.can_be_used ? 'активен' : 'закрыт'}
+                                                    </Badge>
+                                                </div>
+                                                <div className="mt-2 grid grid-cols-3 gap-2 text-slate-600">
+                                                    <div>
+                                                        <div className="text-slate-400">Использовано</div>
+                                                        <div className="font-bold text-slate-900">{used}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-slate-400">Максимум</div>
+                                                        <div className="font-bold text-slate-900">{maxUses}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-slate-400">Осталось</div>
+                                                        <div className="font-bold text-slate-900">{left}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {!selectedProfileTokens.length ? (
+                                        <div className="rounded-xl bg-white p-3 text-xs text-slate-500 ring-1 ring-slate-200">
+                                            Токены для выбранного профиля пока не созданы.
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
                         </div>
                     </section>
 
@@ -808,6 +922,26 @@ export default function ServiceKioskPage() {
                                         >
                                             Удалить киоск
                                         </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => switchShellMode('kiosk')}
+                                            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+                                        >
+                                            Включить режим киоска
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => switchShellMode('desktop')}
+                                            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                                        >
+                                            Вернуть рабочий стол
+                                        </button>
+                                    </div>
+                                    <div className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
+                                        Команды выполняются на самом устройстве через локальный root-helper.
+                                        Киоск должен быть онлайн и должен получать команды из Ryaba.
                                     </div>
                                 </div>
                             </div>
