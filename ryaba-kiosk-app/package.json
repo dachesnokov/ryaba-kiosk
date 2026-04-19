@@ -37,6 +37,10 @@
       {
         "from": "helper/ryaba-kiosk-helper.py",
         "to": "helper/ryaba-kiosk-helper.py"
+      },
+      {
+        "from": "scripts/migrate-local-config.py",
+        "to": "scripts/migrate-local-config.py"
       }
     ],
     "linux": {

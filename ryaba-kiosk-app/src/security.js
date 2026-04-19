@@ -46,13 +46,11 @@ function pathAllowed(pathname, allowedPaths) {
 }
 
 function getSafeHomeUrl(config = {}) {
+  // coreUrl — это адрес API Ryaba Core, а не стартовая страница.
+  // Киоск имеет право открывать сайт только после получения homeUrl/home_url из профиля Ryaba.
   const candidates = [
     config.homeUrl,
     config.home_url,
-    config.localHomeUrl,
-    config.local_home_url,
-    config.coreUrl,
-    config.core_url,
   ];
 
   for (const candidate of candidates) {

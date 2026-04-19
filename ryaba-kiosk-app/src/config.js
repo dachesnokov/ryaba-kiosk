@@ -70,7 +70,11 @@ function writeLocalConfig(config) {
 function writeRemoteConfig(config) {
   const stateDir = getStateDir();
   ensureDir(stateDir);
-  fs.writeFileSync(path.join(stateDir, 'remote-config.json'), JSON.stringify(config, null, 2));
+  const file = path.join(stateDir, 'remote-config.json');
+  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  try {
+    fs.chmodSync(file, 0o666);
+  } catch (_) {}
 }
 
 function readDeviceState() {
@@ -92,9 +96,6 @@ module.exports = {
   STATE_DIR,
   getStateDir,
   loadConfig,
-  writeLocalConfig,
-  writeLocalConfig,
-  writeLocalConfig,
   writeLocalConfig,
   writeRemoteConfig,
   readDeviceState,

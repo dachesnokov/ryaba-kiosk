@@ -345,9 +345,17 @@ async function handleCommand(cmd) {
     case 'reload':
       if (mainWindow) mainWindow.reload();
       return { ok: true };
-    case 'go_home':
-      if (mainWindow) mainWindow.loadURL(getSafeHomeUrl(loadConfig()));
+    case 'go_home': {
+      const nextConfig = loadConfig();
+      if (mainWindow) {
+        if (!hasRemoteProfileConfig(nextConfig)) {
+          showWaitingProfile('Стартовая страница еще не получена из профиля Ryaba.');
+        } else {
+          mainWindow.loadURL(getSafeHomeUrl(nextConfig));
+        }
+      }
       return { ok: true };
+    }
     case 'restart_app':
       app.relaunch();
       app.exit(0);
@@ -427,23 +435,16 @@ app.whenReady().then(() => {
     try {
       const coreUrl = String(payload?.coreUrl || '').trim().replace(/\/$/, '');
       const enrollmentToken = String(payload?.enrollmentToken || '').trim();
-      const localHomeUrl = coreUrl;
 
       if (!coreUrl || !enrollmentToken) {
         return { ok: false, error: 'Укажите адрес Ryaba Core и ключ регистрации.' };
       }
 
-      let origin = coreUrl;
-      try {
-        origin = new URL(localHomeUrl || coreUrl).origin;
-      } catch (_) {}
-
+      // Важно: coreUrl — это только API Ryaba Core.
+      // Стартовая страница киоска должна прийти только из профиля/конфига Ryaba.
       writeLocalConfig({
         coreUrl,
         enrollmentToken,
-        localHomeUrl: localHomeUrl || coreUrl,
-        allowedOrigins: [origin],
-        allowedPaths: ['/*'],
         savedAt: new Date().toISOString()
       });
 

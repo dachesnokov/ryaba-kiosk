@@ -29,6 +29,14 @@ chown -R "$KIOSK_USER:$KIOSK_USER" /var/lib/ryaba-kiosk || true
 chmod -R u+rwX,g+rwX /var/lib/ryaba-kiosk || true
 install -d -m 0755 /opt/ryaba-kiosk
 
+if [ -f "$APP_DIR/resources/scripts/migrate-local-config.py" ]; then
+  python3 "$APP_DIR/resources/scripts/migrate-local-config.py" || true
+fi
+
+chown -R "$KIOSK_USER:$KIOSK_USER" /var/lib/ryaba-kiosk || true
+chmod -R u+rwX,g+rwX /var/lib/ryaba-kiosk || true
+
+
 cat > /etc/ryaba-kiosk/config.json <<'JSON'
 {
   "coreUrl": "",
@@ -74,7 +82,7 @@ cat > /usr/local/bin/ryaba-kiosk-xsession <<'SH'
 set -u
 
 mkdir -p /var/lib/ryaba-kiosk
-chmod 0777 /var/lib/ryaba-kiosk 2>/dev/null || true
+chmod 0775 /var/lib/ryaba-kiosk 2>/dev/null || true
 
 LOG_FILE="/var/lib/ryaba-kiosk/shell.log"
 touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-shell.log"
@@ -131,7 +139,7 @@ cat > /usr/local/bin/ryaba-kiosk-start-xorg <<'SH'
 set -euo pipefail
 
 mkdir -p /var/lib/ryaba-kiosk
-chmod 0777 /var/lib/ryaba-kiosk 2>/dev/null || true
+chmod 0775 /var/lib/ryaba-kiosk 2>/dev/null || true
 
 LOG_FILE="/var/lib/ryaba-kiosk/xorg-start.log"
 touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/ryaba-kiosk-xorg-start.log"
@@ -188,9 +196,6 @@ Environment=HOME=/home/ryaba-kiosk
 Environment=USER=ryaba-kiosk
 Environment=LOGNAME=ryaba-kiosk
 Environment=RYABA_KIOSK_STATE_DIR=/var/lib/ryaba-kiosk
-ExecStartPre=+/usr/bin/install -d -o ryaba-kiosk -g ryaba-kiosk -m 0775 /var/lib/ryaba-kiosk
-ExecStartPre=+/usr/bin/chown -R ryaba-kiosk:ryaba-kiosk /var/lib/ryaba-kiosk
-ExecStartPre=+/usr/bin/chmod -R u+rwX,g+rwX /var/lib/ryaba-kiosk
 
 TTYPath=/dev/tty7
 TTYReset=yes
